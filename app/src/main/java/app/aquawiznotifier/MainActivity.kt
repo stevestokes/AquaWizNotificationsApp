@@ -252,7 +252,7 @@ class MainActivity : Activity() {
             session.username.isNotBlank() &&
             session.password.isNotBlank() &&
             !store.selectedDevice().isNullOrBlank()
-        tabs.currentTabTag = if (configured) "status" else "config"
+        tabs.setCurrentTabByTag(if (configured) "status" else "config")
     }
 
     private fun signIn() {
