@@ -120,21 +120,25 @@ class UpdateWorker(context: Context, params: WorkerParameters) : Worker(context,
     override fun doWork(): Result {
         val store = SecureStore(applicationContext)
         store.setLastUpdateCheckEpochMs(System.currentTimeMillis())
+        store.appendActivity("Checking GitHub Releases for an app update")
         return try {
             val release = UpdateChecker.fetchLatestRelease()
             store.setLatestReleaseVersion(release.versionName)
             store.setLatestReleaseUrl(release.htmlUrl)
             store.setLastUpdateError(null)
+            store.appendActivity("Latest GitHub release: " + release.versionName)
 
             if (UpdateChecker.isNewer(release.tagName, BuildConfig.VERSION_NAME)) {
                 if (store.lastUpdateNotifiedVersion() != release.versionName) {
                     Notifier.updateAvailable(applicationContext, release)
+                    store.appendActivity("Update available: " + release.versionName)
                     store.setLastUpdateNotifiedVersion(release.versionName)
                 }
             }
             Result.success()
         } catch (e: Exception) {
             store.setLastUpdateError(e.message ?: e.javaClass.simpleName)
+            store.appendActivity("Update check failed: " + (e.message ?: e.javaClass.simpleName))
             Result.success()
         }
     }
