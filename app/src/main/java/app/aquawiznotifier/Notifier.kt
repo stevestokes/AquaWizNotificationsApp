@@ -29,7 +29,7 @@ object Notifier {
         }
     }
 
-    fun measurement(context: Context, m: Measurement, previousKh: Double?) {
+    fun measurement(context: Context, serial: String, m: Measurement, previousKh: Double?) {
         if (!allowed(context)) return
         ensureChannel(context)
         val time = DateTimeFormatter.ofPattern("h:mm a").withZone(ZoneId.systemDefault()).format(m.measuredAt)
@@ -38,10 +38,24 @@ object Notifier {
             val arrow = when { delta > 0.0001 -> "↑"; delta < -0.0001 -> "↓"; else -> "→" }
             "$arrow ${"%.2f".format(abs(delta))}"
         }
-        val detail = buildString {
-            append("${"%.2f".format(m.kh)} dKH")
-            if (m.ph != null) append(", pH ${"%.2f".format(m.ph)}")
+        val store = SecureStore(context)
+        val title = buildString {
+            append("[")
+            append(serial)
+            append("] ")
+            append("%.2f".format(m.kh))
+            append(" dKH")
+            if (m.ph != null) {
+                append(", ")
+                append("%.2f".format(m.ph))
+                append(" pH")
+            }
         }
+        val optional = mutableListOf<String>()
+        if (store.showPhOpenAir() && m.phOpenAir != null) optional += "pH(O) " + "%.2f".format(m.phOpenAir)
+        if (store.showDeltaPh() && m.deltaPh != null) optional += "ΔpH " + "%+.2f".format(m.deltaPh)
+        if (store.showDoseMl() && m.doseMl != null) optional += "Dose " + "%.2f".format(m.doseMl) + " mL"
+        val detail = if (optional.isEmpty()) "Measured $time" else optional.joinToString(" • ")
         val subText = buildString {
             append("Measured $time")
             if (change != null) append(" • $change dKH")
@@ -52,7 +66,7 @@ object Notifier {
         )
         val n = android.app.Notification.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_aquawiz_notify)
-            .setContentTitle("AquaWiz Measure")
+            .setContentTitle(title)
             .setContentText(detail)
             .setSubText(subText)
             .setContentIntent(pending)
@@ -98,7 +112,7 @@ object Notifier {
     }
 
     fun test(context: Context) {
-        measurement(context, Measurement(8.42, java.time.Instant.now(), rawId = "test", ph = 8.27), 8.35)
+        measurement(context, "KH1-00-05117", Measurement(8.42, java.time.Instant.now(), rawId = "test", ph = 8.27, phOpenAir = 8.35, deltaPh = -0.08, doseMl = 1.20), 8.35)
     }
 
     private fun allowed(context: Context): Boolean =
