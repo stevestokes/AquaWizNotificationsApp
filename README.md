@@ -242,6 +242,16 @@ The project does not operate its own backend, notification relay, analytics serv
 
 See [SECURITY.md](SECURITY.md).
 
+## Support
+
+If AquaWiz Notifier is useful to you and you'd like to give something back, please consider donating to the **Cystic Fibrosis Foundation** instead of buying me a coffee or sending anything to me personally.
+
+Cystic fibrosis (CF) is a genetic disease that affects the lungs, digestive system, and other organs by causing thick, sticky mucus to build up in the body. It is a lifelong condition that can lead to serious respiratory and nutritional complications. CF has impacted my family, so I'd much rather see support for the people and research fighting this disease than receive a donation for my work on this app.
+
+[**Donate to the Cystic Fibrosis Foundation**](https://www.cff.org/donate)
+
+If possible, please donate **in honor of Kaylee Stokes, Michigan Chapter**.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
