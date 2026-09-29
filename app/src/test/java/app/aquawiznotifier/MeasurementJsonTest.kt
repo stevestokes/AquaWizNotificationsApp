@@ -57,4 +57,28 @@ class MeasurementJsonTest {
         assertNull(MeasurementJson.findLatest(raw, "KH-A", requirePreferredSerialWhenAmbiguous = true))
     }
 
+
+    @Test fun parsesOfficialRawGraphRowsAndScalesField22() {
+        val raw = """
+            {
+              "results": [
+                ["2026-09-29T12:04:00Z", {"field22":"8123","field23":"821"}],
+                ["2026-09-29T13:04:00Z", {"field22":8176,"field23":"824"}]
+              ]
+            }
+        """.trimIndent()
+
+        val result = MeasurementJson.findLatest(raw, "KH1-00-05117", requirePreferredSerialWhenAmbiguous = false)
+        assertNotNull(result)
+        assertEquals(8.176, result!!.kh, 0.0001)
+        assertEquals(Instant.parse("2026-09-29T13:04:00Z"), result.measuredAt)
+    }
+
+    @Test fun parsesAlreadyTransformedGraphObjectWithField22() {
+        val raw = """{"results":[{"date":"2026-09-29T13:04:00Z","field22":"8.176"}]}"""
+        val result = MeasurementJson.findLatest(raw, "KH1-00-05117", requirePreferredSerialWhenAmbiguous = false)
+        assertNotNull(result)
+        assertEquals(8.176, result!!.kh, 0.0001)
+    }
+
 }

@@ -51,10 +51,11 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
      * undocumented all_field schema changes.
      */
     fun latestMeasurement(session: Session, serial: String): Measurement {
+        val normalizedSerial = serial.trim().uppercase()
         val directFailure: Exception? = try {
-            val raw = rawAllFields(session)
-            MeasurementJson.findLatest(raw, serial, requirePreferredSerialWhenAmbiguous = true)?.let { return it }
-            ApiException(200, "AquaWiz all_field response did not contain a current KH value for device $serial")
+            val raw = rawAllFields(session, normalizedSerial)
+            MeasurementJson.findLatest(raw, normalizedSerial, requirePreferredSerialWhenAmbiguous = true)?.let { return it }
+            ApiException(200, "AquaWiz all_field response did not contain a current KH value for device $normalizedSerial")
         } catch (e: ApiException) {
             if (e.status == 401 || e.status == 403) throw e
             e
@@ -63,8 +64,8 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
         }
 
         try {
-            val raw = rawGraph(session, serial)
-            return MeasurementJson.findLatest(raw, serial, requirePreferredSerialWhenAmbiguous = false)
+            val raw = rawGraph(session, normalizedSerial)
+            return MeasurementJson.findLatest(raw, normalizedSerial, requirePreferredSerialWhenAmbiguous = false)
                 ?: throw ApiException(200, "Connected, but no KH measurement could be identified in the AquaWiz graph response")
         } catch (e: ApiException) {
             if (e.status == 401 || e.status == 403) throw e
@@ -75,19 +76,19 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
 
     /**
      * Official app contract recovered from Hermes bytecode:
-     * POST /api/v1/KH/{username}/all_field
+     * POST /api/v1/KH/{deviceSerial}/all_field
      * Authorization: Bearer <access_token>
      * body: {"user":"<username>","token":{"access_token":"<access_token>"}}
      */
-    fun rawAllFields(session: Session): String {
-        val encodedUser = URLEncoder.encode(session.username, StandardCharsets.UTF_8.toString()).replace("+", "%20")
+    fun rawAllFields(session: Session, serial: String): String {
+        val encodedSerial = URLEncoder.encode(serial.trim().uppercase(), StandardCharsets.UTF_8.toString()).replace("+", "%20")
         val body = JSONObject()
             .put("user", session.username)
             .put("token", JSONObject().put("access_token", session.accessToken))
             .toString()
         return request(
             "POST",
-            "$baseUrl/api/v1/KH/$encodedUser/all_field",
+            "$baseUrl/api/v1/KH/$encodedSerial/all_field",
             token = session.accessToken,
             body = body,
         )
@@ -96,7 +97,7 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
     /** Official app graph route recovered from AquaWiz APK. */
     fun rawGraph(session: Session, serial: String): String {
         val since = Instant.now().minusSeconds(8 * 60 * 60).toString()
-        val encodedSerial = URLEncoder.encode(serial, StandardCharsets.UTF_8.toString()).replace("+", "%20")
+        val encodedSerial = URLEncoder.encode(serial.trim().uppercase(), StandardCharsets.UTF_8.toString()).replace("+", "%20")
         val encodedDate = URLEncoder.encode(since, StandardCharsets.UTF_8.toString())
         return request("GET", "$baseUrl/api/v1/query/device/$encodedSerial/graph?date=$encodedDate", token = session.accessToken)
     }
@@ -163,6 +164,7 @@ object MeasurementJson {
     ): Measurement? {
         val root = runCatching { JSONTokener(raw).nextValue() }.getOrNull() ?: return null
         val found = mutableListOf<Candidate>()
+        extractOfficialGraphRows(root, preferredSerial, found)
         walk(root, found, inheritedSerial = null)
         if (found.isEmpty()) return null
 
@@ -183,6 +185,41 @@ object MeasurementJson {
         return found.maxByOrNull { it.measurement.measuredAt }?.measurement
     }
 
+    /**
+     * Official graph response contract recovered from the AquaWiz APK:
+     * response.results.map(row => ({ date: row[0], ...transform(row[1]) }))
+     *
+     * For KH-series devices, field22 is the KH value and the official client transforms it by
+     * dividing the raw value by 1000.
+     */
+    private fun extractOfficialGraphRows(root: Any?, preferredSerial: String?, out: MutableList<Candidate>) {
+        val results = (root as? JSONObject)?.optJSONArray("results") ?: return
+        for (i in 0 until results.length()) {
+            val row = results.optJSONArray(i) ?: continue
+            if (row.length() < 2) continue
+            val measuredAt = parseInstant(row.opt(0)) ?: continue
+            val fields = row.optJSONObject(1) ?: continue
+            val kh = khFromField22(fields.opt("field22")) ?: continue
+            if (kh !in 2.0..20.0) continue
+            out += Candidate(
+                Measurement(
+                    kh = kh,
+                    measuredAt = measuredAt,
+                    rawId = "graph:" + measuredAt.toEpochMilli(),
+                    ph = null,
+                ),
+                preferredSerial,
+            )
+        }
+    }
+
+    private fun khFromField22(value: Any?): Double? {
+        val raw = asDouble(value) ?: return null
+        // Official transformKhRawValue(field22) => formatNumber(Number(value) / 1000, 3).
+        // Accept already-scaled values defensively in case the server changes representation.
+        return if (raw > 20.0) raw / 1000.0 else raw
+    }
+
     private fun walk(v: Any?, out: MutableList<Candidate>, inheritedSerial: String?) {
         when (v) {
             is JSONArray -> for (i in 0 until v.length()) walk(v.opt(i), out, inheritedSerial)
@@ -196,7 +233,7 @@ object MeasurementJson {
     }
 
     private fun parseObject(o: JSONObject): Measurement? {
-        val kh = number(o, khKeys) ?: inferKhFromGraphObject(o) ?: return null
+        val kh = number(o, khKeys) ?: khFromField22(o.opt("field22")) ?: inferKhFromGraphObject(o) ?: return null
         if (kh !in 2.0..20.0) return null
         val whenAt = instant(o, timeKeys) ?: return null
         val id = string(o, idKeys)
@@ -214,6 +251,7 @@ object MeasurementJson {
         while (it.hasNext()) {
             val k = it.next()
             if (!k.startsWith("field", true) && k !in listOf("value", "result")) continue
+            if (k.equals("field22", ignoreCase = true)) continue
             val n = asDouble(o.opt(k)) ?: continue
             if (n in 2.0..20.0) candidates += n
         }
