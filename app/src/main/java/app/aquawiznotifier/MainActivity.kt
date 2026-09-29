@@ -5,6 +5,8 @@ import android.app.Activity
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
+import android.text.method.LinkMovementMethod
+import android.text.util.Linkify
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.*
@@ -45,6 +47,21 @@ class MainActivity : Activity() {
         scroll.addView(root)
         fun text(label: String, size: Float = 16f) = TextView(this).apply { text = label; textSize = size; setPadding(0, dp(6), 0, dp(6)) }
         root.addView(text("AquaWiz Notifier", 28f))
+
+        val github = text("GitHub: https://github.com/stevestokes/AquaWizNotificationsApp", 13f).apply {
+            autoLinkMask = Linkify.WEB_URLS
+            movementMethod = LinkMovementMethod.getInstance()
+            linksClickable = true
+        }
+        root.addView(github)
+
+        val author = text("Made by Biff0rz • Find me on Reef2Reef: https://www.reef2reef.com/members/biff0rz.154703/", 13f).apply {
+            autoLinkMask = Linkify.WEB_URLS
+            movementMethod = LinkMovementMethod.getInstance()
+            linksClickable = true
+        }
+        root.addView(author)
+
         root.addView(text("Unofficial Android notifier. Every newly detected KH measurement produces a local notification.", 15f))
 
         region = Spinner(this).apply { adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("Global (server.aquawiz.net)", "China (server.aquawiz.cn)")) }
