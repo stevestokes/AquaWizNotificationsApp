@@ -55,13 +55,18 @@ Before publishing a tagged AquaWiz Notifier release:
     git push origin v0.2.0
     ```
 29. Confirm the **Tagged APK Release** workflow succeeds.
-30. Confirm the GitHub Release contains a signed APK named like:
+30. Confirm the GitHub Release contains both signed APK assets:
     ```text
+    AquaWizNotifier.apk
     AquaWizNotifier-v0.2.0.apk
     ```
-31. Install the signed release APK.
-32. For later releases, verify the new signed APK installs **over the previous signed release without uninstalling it**. This is the practical confirmation that the signing key has remained stable.
-33. Capture/update redacted AquaWiz response fixtures when live API behavior changes.
+31. Confirm the README's permanent latest-download URL works:
+    ```text
+    https://github.com/stevestokes/AquaWizNotificationsApp/releases/latest/download/AquaWizNotifier.apk
+    ```
+32. Install the signed release APK.
+33. For later releases, verify the new signed APK installs **over the previous signed release without uninstalling it**. This is the practical confirmation that the signing key has remained stable.
+34. Capture/update redacted AquaWiz response fixtures when live API behavior changes.
 
 ## Current AquaWiz contracts to verify
 
