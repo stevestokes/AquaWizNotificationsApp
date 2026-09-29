@@ -81,4 +81,36 @@ class MeasurementJsonTest {
         assertEquals(8.176, result!!.kh, 0.0001)
     }
 
+
+    @Test fun officialGraphRowIncludesScaledPhFromField23() {
+        val raw = """
+            {
+              "results": [
+                ["2026-09-29T13:04:00Z", {"field22":8420,"field23":827}]
+              ]
+            }
+        """.trimIndent()
+
+        val result = MeasurementJson.findLatest(raw, "KH1-00-05117", requirePreferredSerialWhenAmbiguous = false)
+        assertNotNull(result)
+        assertEquals(8.42, result!!.kh, 0.0001)
+        assertEquals(8.27, result.ph!!, 0.0001)
+    }
+
+    @Test fun allFieldUsesLatestPh1NotLatestPhStatus() {
+        val raw = """
+            {
+              "deviceSerial":"KH1-00-05117",
+              "latest_kh":8.42,
+              "latest_time":"2026-09-29T13:04:00Z",
+              "latest_ph":1,
+              "latest_ph1":8.27
+            }
+        """.trimIndent()
+
+        val result = MeasurementJson.findLatest(raw, "KH1-00-05117", requirePreferredSerialWhenAmbiguous = true)
+        assertNotNull(result)
+        assertEquals(8.27, result!!.ph!!, 0.0001)
+    }
+
 }
