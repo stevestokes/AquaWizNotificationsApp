@@ -8,6 +8,14 @@ Project: [github.com/stevestokes/AquaWizNotificationsApp](https://github.com/ste
 
 > Not affiliated with or endorsed by AquaWiz. This project uses an undocumented interface recovered from the publicly distributed AquaWiz Android APK. AquaWiz may change that interface at any time.
 
+## Download
+
+[**Download the latest AquaWiz Notifier APK**](https://github.com/stevestokes/AquaWizNotificationsApp/releases/latest/download/AquaWizNotifier.apk)
+
+Android only. This is a sideloaded APK. On first install, Android may ask you to allow installs from your browser or file manager.
+
+[View all releases](https://github.com/stevestokes/AquaWizNotificationsApp/releases)
+
 ## Features
 
 - Android notification for every newly detected AquaWiz measurement.
@@ -178,7 +186,7 @@ The tagged-release workflow expects these GitHub Actions secrets:
 - `AQUAWIZ_KEY_ALIAS`
 - `AQUAWIZ_KEY_PASSWORD`
 
-A tag such as `v0.2.0` builds a signed release APK and publishes it to a GitHub Release.
+A tag such as `v0.2.0` builds a signed release APK and publishes two release assets: `AquaWizNotifier.apk` for the permanent latest-download link and `AquaWizNotifier-v0.2.0.apk` for versioned archives.
 
 Do not lose the release keystore. If it is lost, existing users cannot install future APKs as normal upgrades.
 
