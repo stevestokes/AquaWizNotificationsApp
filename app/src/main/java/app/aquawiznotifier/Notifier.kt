@@ -16,6 +16,7 @@ object Notifier {
     private const val CHANNEL = "measurements"
     private const val ID_MEASUREMENT = 1001
     private const val ID_ERROR = 1002
+    private const val ID_UPDATE = 1003
 
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -74,6 +75,26 @@ object Notifier {
             .setAutoCancel(true)
             .build()
         context.getSystemService(NotificationManager::class.java).notify(ID_ERROR, n)
+    }
+
+    fun updateAvailable(context: Context, release: ReleaseInfo) {
+        if (!allowed(context)) return
+        ensureChannel(context)
+        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(release.htmlUrl))
+        val pending = PendingIntent.getActivity(
+            context,
+            2,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val n = android.app.Notification.Builder(context, CHANNEL)
+            .setSmallIcon(R.drawable.ic_stat_aquawiz_notify)
+            .setContentTitle("AquaWiz Notifier update available")
+            .setContentText("Version ${release.versionName} is available. Tap to update.")
+            .setContentIntent(pending)
+            .setAutoCancel(true)
+            .build()
+        context.getSystemService(NotificationManager::class.java).notify(ID_UPDATE, n)
     }
 
     fun test(context: Context) {
