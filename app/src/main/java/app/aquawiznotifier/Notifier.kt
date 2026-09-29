@@ -38,9 +38,12 @@ object Notifier {
             "$arrow ${"%.2f".format(abs(delta))}"
         }
         val detail = buildString {
+            append("${"%.2f".format(m.kh)} dKH")
+            if (m.ph != null) append(", pH ${"%.2f".format(m.ph)}")
+        }
+        val subText = buildString {
             append("Measured $time")
-            if (change != null) append("  •  $change dKH")
-            if (m.ph != null) append("  •  pH ${"%.2f".format(m.ph)}")
+            if (change != null) append(" • $change dKH")
         }
         val pending = PendingIntent.getActivity(
             context, 0, Intent(context, MainActivity::class.java),
@@ -48,8 +51,9 @@ object Notifier {
         )
         val n = android.app.Notification.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_aquawiz_notify)
-            .setContentTitle("AquaWiz · ${"%.2f".format(m.kh)} dKH")
+            .setContentTitle("AquaWiz Measure")
             .setContentText(detail)
+            .setSubText(subText)
             .setContentIntent(pending)
             .setAutoCancel(true)
             .setShowWhen(true)
@@ -73,7 +77,7 @@ object Notifier {
     }
 
     fun test(context: Context) {
-        measurement(context, Measurement(8.12, java.time.Instant.now(), rawId = "test"), 8.05)
+        measurement(context, Measurement(8.42, java.time.Instant.now(), rawId = "test", ph = 8.27), 8.35)
     }
 
     private fun allowed(context: Context): Boolean =
