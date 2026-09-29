@@ -20,7 +20,15 @@ import java.time.format.DateTimeFormatter
 
 class MainActivity : Activity() {
     private lateinit var store: SecureStore
-    private lateinit var tabs: TabHost
+
+    private lateinit var statusSection: View
+    private lateinit var historySection: View
+    private lateinit var configSection: View
+    private lateinit var statusTabButton: Button
+    private lateinit var historyTabButton: Button
+    private lateinit var configTabButton: Button
+    private var currentSection = "config"
+
     private lateinit var username: EditText
     private lateinit var password: EditText
     private lateinit var serial: EditText
@@ -29,16 +37,18 @@ class MainActivity : Activity() {
     private lateinit var phOpenAirCheck: CheckBox
     private lateinit var deltaPhCheck: CheckBox
     private lateinit var doseCheck: CheckBox
+
     private lateinit var status: TextView
     private lateinit var historyContainer: LinearLayout
 
     private val statusFmt = DateTimeFormatter.ofPattern("MMM d, h:mm a").withZone(ZoneId.systemDefault())
     private val historyFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault())
+
     private val uiHandler = Handler(Looper.getMainLooper())
     private val refreshRunnable = object : Runnable {
         override fun run() {
             if (::status.isInitialized) updateStatus()
-            if (::historyContainer.isInitialized && ::tabs.isInitialized && tabs.currentTabTag == "history") updateHistory()
+            if (::historyContainer.isInitialized && currentSection == "history") updateHistory()
             uiHandler.postDelayed(this, 3000L)
         }
     }
@@ -50,7 +60,7 @@ class MainActivity : Activity() {
         requestNotifications()
         setContentView(buildUi())
         populate()
-        selectInitialTab()
+        selectInitialSection()
         UpdateChecker.schedule(this)
     }
 
@@ -68,39 +78,61 @@ class MainActivity : Activity() {
     }
 
     private fun buildUi(): View {
-        tabs = TabHost(this)
-        val tabWidget = TabWidget(this).apply { id = android.R.id.tabs }
-        val content = FrameLayout(this).apply { id = android.R.id.tabcontent }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            addView(tabWidget, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         }
-        tabs.addView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        tabs.setup()
 
-        val statusView = buildStatusTab().apply { id = View.generateViewId() }
-        val historyView = buildHistoryTab().apply { id = View.generateViewId() }
-        val configView = buildConfigTab().apply { id = View.generateViewId() }
-
-        content.addView(statusView)
-        content.addView(historyView)
-        content.addView(configView)
-
-        tabs.addTab(tabs.newTabSpec("status").setIndicator("Status").setContent(statusView.id))
-        tabs.addTab(tabs.newTabSpec("history").setIndicator("History").setContent(historyView.id))
-        tabs.addTab(tabs.newTabSpec("config").setIndicator("Config").setContent(configView.id))
-        tabs.setOnTabChangedListener {
-            if (it == "status") updateStatus()
-            if (it == "history") updateHistory()
+        val tabBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(8), dp(8), dp(8), dp(4))
         }
-        return tabs
+
+        statusTabButton = tabButton("Status") { showSection("status") }
+        historyTabButton = tabButton("History") { showSection("history") }
+        configTabButton = tabButton("Config") { showSection("config") }
+
+        tabBar.addView(statusTabButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        tabBar.addView(historyTabButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        tabBar.addView(configTabButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        root.addView(tabBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+        val content = FrameLayout(this)
+        statusSection = buildStatusSection()
+        historySection = buildHistorySection()
+        configSection = buildConfigSection()
+
+        content.addView(statusSection, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        content.addView(historySection, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        content.addView(configSection, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+
+        root.addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        return root
     }
 
-    private fun buildStatusTab(): View {
+    private fun tabButton(label: String, action: () -> Unit) = Button(this).apply {
+        text = label
+        setOnClickListener { action() }
+    }
+
+    private fun showSection(section: String) {
+        currentSection = section
+        statusSection.visibility = if (section == "status") View.VISIBLE else View.GONE
+        historySection.visibility = if (section == "history") View.VISIBLE else View.GONE
+        configSection.visibility = if (section == "config") View.VISIBLE else View.GONE
+
+        statusTabButton.isEnabled = section != "status"
+        historyTabButton.isEnabled = section != "history"
+        configTabButton.isEnabled = section != "config"
+
+        if (section == "status") updateStatus()
+        if (section == "history") updateHistory()
+    }
+
+    private fun buildStatusSection(): View {
         val scroll = ScrollView(this)
         val root = verticalRoot()
         scroll.addView(root)
+
         root.addView(textView("AquaWiz Notifier", 26f))
         root.addView(textView("Status", 20f))
         root.addView(textView("Live monitoring state and recent activity.", 14f))
@@ -129,25 +161,27 @@ class MainActivity : Activity() {
         return scroll
     }
 
-    private fun buildHistoryTab(): View {
+    private fun buildHistorySection(): View {
         val scroll = ScrollView(this)
         historyContainer = verticalRoot()
         scroll.addView(historyContainer)
         return scroll
     }
 
-    private fun buildConfigTab(): View {
+    private fun buildConfigSection(): View {
         val scroll = ScrollView(this)
         val root = verticalRoot()
         scroll.addView(root)
 
         root.addView(textView("AquaWiz Notifier", 26f))
+
         val github = textView("GitHub: https://github.com/stevestokes/AquaWizNotificationsApp", 13f).apply {
             autoLinkMask = Linkify.WEB_URLS
             movementMethod = LinkMovementMethod.getInstance()
             linksClickable = true
         }
         root.addView(github)
+
         val author = textView("Made by Biff0rz • Reef2Reef: https://www.reef2reef.com/members/biff0rz.154703/", 13f).apply {
             autoLinkMask = Linkify.WEB_URLS
             movementMethod = LinkMovementMethod.getInstance()
@@ -174,6 +208,7 @@ class MainActivity : Activity() {
         interval = field("Measurement interval in minutes (default 60)").apply {
             inputType = InputType.TYPE_CLASS_NUMBER
         }
+
         root.addView(username, full())
         root.addView(password, full())
         root.addView(serial, full())
@@ -192,12 +227,19 @@ class MainActivity : Activity() {
             text = "Show Dose (mL)"
             setOnCheckedChangeListener { _, checked -> store.setShowDoseMl(checked) }
         }
+
         root.addView(phOpenAirCheck, full())
         root.addView(deltaPhCheck, full())
         root.addView(doseCheck, full())
 
-        val signIn = Button(this).apply { text = "Sign in & start"; setOnClickListener { signIn() } }
-        val test = Button(this).apply { text = "Test notification"; setOnClickListener { Notifier.test(this@MainActivity) } }
+        val signIn = Button(this).apply {
+            text = "Sign in & start"
+            setOnClickListener { signIn() }
+        }
+        val test = Button(this).apply {
+            text = "Test notification"
+            setOnClickListener { Notifier.test(this@MainActivity) }
+        }
         val updates = Button(this).apply {
             text = "Check for updates"
             setOnClickListener {
@@ -215,7 +257,7 @@ class MainActivity : Activity() {
                 store.clearSession()
                 store.clearMonitoringState()
                 toast("Stopped")
-                tabs.setCurrentTabByTag("config")
+                showSection("config")
                 updateStatus()
             }
         }
@@ -224,7 +266,12 @@ class MainActivity : Activity() {
         root.addView(test, full())
         root.addView(updates, full())
         root.addView(stop, full())
-        root.addView(textView("Test notification uses the most recent stored AquaWiz measurement when available. Before the first real reading, it uses a normal sample value.", 12f))
+        root.addView(
+            textView(
+                "Test notification uses the most recent stored AquaWiz measurement when available. Before the first real reading, it uses a normal sample value.",
+                12f
+            )
+        )
         return scroll
     }
 
@@ -246,24 +293,27 @@ class MainActivity : Activity() {
         setPadding(dp(12), dp(10), dp(12), dp(10))
     }
 
-    private fun selectInitialTab() {
+    private fun selectInitialSection() {
         val session = store.session()
         val configured = session != null &&
             session.username.isNotBlank() &&
             session.password.isNotBlank() &&
             !store.selectedDevice().isNullOrBlank()
-        tabs.setCurrentTabByTag(if (configured) "status" else "config")
+
+        showSection(if (configured) "status" else "config")
     }
 
     private fun signIn() {
         val u = username.text.toString().trim()
         val p = password.text.toString()
         val typedSerial = serial.text.toString().trim()
+
         if (u.isBlank() || p.isBlank()) {
             toast("Enter username and password")
-            tabs.setCurrentTabByTag("config")
+            showSection("config")
             return
         }
+
         saveConfig()
         store.appendActivity("Signing in to AquaWiz")
         updateStatus()
@@ -287,9 +337,14 @@ class MainActivity : Activity() {
                         store.setLastPollEpochMs(System.currentTimeMillis())
                         store.setLastError(null)
                         store.appendActivity("Baseline stored in History for " + chosenSerial)
+
                         PollScheduler.schedule(
                             this,
-                            PollCadence.nextRun(Instant.now(), baseline.measuredAt, store.measurementIntervalMinutes()),
+                            PollCadence.nextRun(
+                                Instant.now(),
+                                baseline.measuredAt,
+                                store.measurementIntervalMinutes()
+                            ),
                         )
                     } catch (e: Exception) {
                         store.setLastError("Initial data check: " + (e.message ?: e.javaClass.simpleName))
@@ -307,14 +362,14 @@ class MainActivity : Activity() {
                         if (chosenSerial.isBlank()) "Signed in. Enter your device serial."
                         else "Signed in. Monitoring started."
                     )
-                    if (chosenSerial.isNotBlank()) tabs.setCurrentTabByTag("status")
+                    if (chosenSerial.isNotBlank()) showSection("status") else showSection("config")
                     updateStatus()
                     updateHistory()
                 }
             } catch (e: Exception) {
                 store.appendActivity("Sign-in failed: " + (e.message ?: e.javaClass.simpleName))
                 runOnUiThread {
-                    tabs.setCurrentTabByTag("config")
+                    showSection("config")
                     updateStatus()
                 }
             }
@@ -322,7 +377,10 @@ class MainActivity : Activity() {
     }
 
     private fun saveConfig() {
-        store.setBaseUrl(if (region.selectedItemPosition == 1) AquaWizApi.CHINA_BASE else AquaWizApi.GLOBAL_BASE)
+        store.setBaseUrl(
+            if (region.selectedItemPosition == 1) AquaWizApi.CHINA_BASE
+            else AquaWizApi.GLOBAL_BASE
+        )
         serial.text.toString().trim().takeIf { it.isNotBlank() }?.let(store::setSelectedDevice)
         interval.text.toString().toLongOrNull()?.let(store::setMeasurementIntervalMinutes)
         store.setShowPhOpenAir(phOpenAirCheck.isChecked)
@@ -346,8 +404,10 @@ class MainActivity : Activity() {
 
     private fun updateStatus() {
         if (!::status.isInitialized) return
+
         val session = store.session()
         val lines = mutableListOf<String>()
+
         lines += "App version: " + BuildConfig.VERSION_NAME
         store.latestReleaseVersion()?.let { latest ->
             val update = if (UpdateChecker.isNewer(latest, BuildConfig.VERSION_NAME)) " (update available)" else ""
@@ -368,10 +428,15 @@ class MainActivity : Activity() {
             lines += measurementLine
         }
 
-        store.lastPollEpochMs()?.let { lines += "Last check: " + statusFmt.format(Instant.ofEpochMilli(it)) }
+        store.lastPollEpochMs()?.let {
+            lines += "Last check: " + statusFmt.format(Instant.ofEpochMilli(it))
+        }
         store.lastError()?.let { lines += "Last error: " + it }
-        store.nextPollEpochMs()?.let { lines += "Next eligible check: " + statusFmt.format(Instant.ofEpochMilli(it)) }
-        lines += "Cadence: " + PollCadence.probeOffsetsMinutes(store.measurementIntervalMinutes()).joinToString { value -> "+" + value + "m" }
+        store.nextPollEpochMs()?.let {
+            lines += "Next eligible check: " + statusFmt.format(Instant.ofEpochMilli(it))
+        }
+        lines += "Cadence: " + PollCadence.probeOffsetsMinutes(store.measurementIntervalMinutes())
+            .joinToString { value -> "+" + value + "m" }
         lines += "Android may defer background work during Doze/battery optimization."
 
         val activity = store.activityLog()
@@ -380,6 +445,7 @@ class MainActivity : Activity() {
             append("\n\n--- Activity ---\n")
             if (activity.isBlank()) append("No activity logged yet.") else append(activity)
         }
+
         status.post {
             val layout = status.layout
             if (layout != null) {
@@ -391,9 +457,15 @@ class MainActivity : Activity() {
 
     private fun updateHistory() {
         if (!::historyContainer.isInitialized) return
+
         historyContainer.removeAllViews()
         historyContainer.addView(textView("History", 26f))
-        historyContainer.addView(textView("Locally stored AquaWiz measurements. Notification display settings do not remove fields from History.", 13f))
+        historyContainer.addView(
+            textView(
+                "Locally stored AquaWiz measurements. Notification display settings do not remove fields from History.",
+                13f
+            )
+        )
 
         val history = store.measurementHistory()
         if (history.isEmpty()) {
@@ -406,13 +478,24 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.VERTICAL
                 setPadding(0, dp(8), 0, dp(8))
             }
+
             val primary = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
             }
-            primary.addView(textView(historyFmt.format(measurement.measuredAt), 14f), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.45f))
-            primary.addView(textView("%.2f dKH".format(measurement.kh), 14f), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.9f))
-            primary.addView(textView(measurement.ph?.let { "pH: %.2f".format(it) } ?: "pH: —", 14f), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.85f))
+
+            primary.addView(
+                textView(historyFmt.format(measurement.measuredAt), 14f),
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.45f)
+            )
+            primary.addView(
+                textView("%.2f dKH".format(measurement.kh), 14f),
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.9f)
+            )
+            primary.addView(
+                textView(measurement.ph?.let { "pH: %.2f".format(it) } ?: "pH: —", 14f),
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.85f)
+            )
             row.addView(primary)
 
             val details = mutableListOf<String>()
@@ -423,16 +506,18 @@ class MainActivity : Activity() {
             row.addView(textView(details.joinToString(" • "), 12f))
 
             historyContainer.addView(row, full())
-            historyContainer.addView(View(this).apply {
-                setBackgroundColor(0x22000000)
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
+            historyContainer.addView(
+                View(this).apply { setBackgroundColor(0x22000000) },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1))
+            )
         }
     }
 
     private fun requestNotifications() {
         if (
             Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 7001)
         }
@@ -441,8 +526,13 @@ class MainActivity : Activity() {
     private fun full() = LinearLayout.LayoutParams(
         ViewGroup.LayoutParams.MATCH_PARENT,
         ViewGroup.LayoutParams.WRAP_CONTENT
-    ).apply { topMargin = dp(6) }
+    ).apply {
+        topMargin = dp(6)
+    }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
-    private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
+
+    private fun toast(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
 }

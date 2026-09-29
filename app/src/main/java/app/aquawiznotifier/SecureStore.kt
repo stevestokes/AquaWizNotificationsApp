@@ -121,7 +121,7 @@ class SecureStore(context: Context) {
     fun setShowDoseMl(v: Boolean) = prefs.edit().putBoolean("notify_dose_ml", v).apply()
 
     fun saveMeasurement(serial: String, measurement: Measurement) {
-        val history = JSONArray(prefs.getString("measurement_history", "[]") ?: "[]")
+        val history = runCatching { JSONArray(prefs.getString("measurement_history", "[]") ?: "[]") }.getOrElse { JSONArray() }
         val fingerprint = measurement.fingerprint
         for (i in 0 until history.length()) {
             val existing = history.optJSONObject(i) ?: continue
