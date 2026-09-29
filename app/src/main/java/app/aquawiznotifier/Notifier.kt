@@ -61,7 +61,9 @@ object Notifier {
             if (change != null) append(" • $change dKH")
         }
         val pending = PendingIntent.getActivity(
-            context, 0, Intent(context, MainActivity::class.java),
+            context,
+            1,
+            officialAquaWizLaunchIntent(context),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val n = android.app.Notification.Builder(context, CHANNEL)
@@ -113,6 +115,32 @@ object Notifier {
 
     fun test(context: Context) {
         measurement(context, "KH1-00-05117", Measurement(8.42, java.time.Instant.now(), rawId = "test", ph = 8.27, phOpenAir = 8.35, deltaPh = -0.08, doseMl = 1.20), 8.35)
+    }
+
+
+    private fun officialAquaWizLaunchIntent(context: Context): Intent {
+        val packageManager = context.packageManager
+        val launcherQuery = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val official = packageManager.queryIntentActivities(launcherQuery, PackageManager.MATCH_ALL)
+            .asSequence()
+            .filter { it.activityInfo.packageName != context.packageName }
+            .map { it to it.loadLabel(packageManager).toString().trim() }
+            .sortedByDescending { (_, label) -> label.equals("AquaWiz", ignoreCase = true) }
+            .firstOrNull { (_, label) ->
+                label.equals("AquaWiz", ignoreCase = true) ||
+                    label.contains("AquaWiz", ignoreCase = true)
+            }
+            ?.first
+            ?.activityInfo
+
+        return if (official != null) {
+            Intent(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_LAUNCHER)
+                .setClassName(official.packageName, official.name)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+        } else {
+            Intent(context, MainActivity::class.java)
+        }
     }
 
     private fun allowed(context: Context): Boolean =
