@@ -153,7 +153,8 @@ object MeasurementJson {
     private val khKeys = listOf("latest_kh", "latestKh", "tankKh", "tank_kh", "kh", "dkh", "dKH", "alk", "alkalinity")
     private val timeKeys = listOf("latest_time", "latestTime", "measurementTime", "measurement_time", "date", "timestamp", "time", "created_at", "createdAt")
     private val idKeys = listOf("id", "measurement_id", "measurementId", "uuid")
-    private val phKeys = listOf("latest_ph", "latest_ph1", "latestPh", "phValue", "ph", "pH")
+    // Official DevicePage uses latest_ph as probe status and latest_ph1 as the displayed pH value.
+    private val phKeys = listOf("latest_ph1", "latestPh1", "phValue", "ph", "pH")
 
     private data class Candidate(val measurement: Measurement, val serial: String?)
 
@@ -201,12 +202,13 @@ object MeasurementJson {
             val fields = row.optJSONObject(1) ?: continue
             val kh = khFromField22(fields.opt("field22")) ?: continue
             if (kh !in 2.0..20.0) continue
+            val ph = phFromField23(fields.opt("field23"))
             out += Candidate(
                 Measurement(
                     kh = kh,
                     measuredAt = measuredAt,
                     rawId = "graph:" + measuredAt.toEpochMilli(),
-                    ph = null,
+                    ph = ph,
                 ),
                 preferredSerial,
             )
@@ -218,6 +220,13 @@ object MeasurementJson {
         // Official transformKhRawValue(field22) => formatNumber(Number(value) / 1000, 3).
         // Accept already-scaled values defensively in case the server changes representation.
         return if (raw > 20.0) raw / 1000.0 else raw
+    }
+
+    private fun phFromField23(value: Any?): Double? {
+        val raw = asDouble(value) ?: return null
+        // Official transformKhRawValue(field23) => formatNumber(Number(value) / 100, 3).
+        val scaled = if (raw > 12.0) raw / 100.0 else raw
+        return scaled.takeIf { it in 4.0..12.0 }
     }
 
     private fun walk(v: Any?, out: MutableList<Candidate>, inheritedSerial: String?) {
