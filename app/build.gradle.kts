@@ -6,6 +6,18 @@ android {
     namespace = "app.aquawiznotifier"
     compileSdk = 36
 
+    val releaseKeystorePath = System.getenv("AQUAWIZ_KEYSTORE_PATH")
+    signingConfigs {
+        if (!releaseKeystorePath.isNullOrBlank()) {
+            create("release") {
+                storeFile = file(releaseKeystorePath)
+                storePassword = System.getenv("AQUAWIZ_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("AQUAWIZ_KEY_ALIAS")
+                keyPassword = System.getenv("AQUAWIZ_KEY_PASSWORD")
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "app.aquawiznotifier"
         minSdk = 26
@@ -14,6 +26,12 @@ android {
         versionName = "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        getByName("release") {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
+        }
     }
 
     buildFeatures {
