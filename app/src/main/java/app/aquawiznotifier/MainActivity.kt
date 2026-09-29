@@ -13,6 +13,7 @@ import android.text.util.Linkify
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
 import android.widget.*
 import java.time.Instant
 import java.time.ZoneId
@@ -85,6 +86,17 @@ class MainActivity : Activity() {
         val tabBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(dp(8), dp(8), dp(8), dp(4))
+            setOnApplyWindowInsetsListener { view, insets ->
+                val topInset = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    insets.getInsets(WindowInsets.Type.statusBars()).top
+                } else {
+                    @Suppress("DEPRECATION")
+                    insets.systemWindowInsetTop
+                }
+                view.setPadding(dp(8), topInset + dp(8), dp(8), dp(4))
+                insets
+            }
+            post { requestApplyInsets() }
         }
 
         statusTabButton = tabButton("Status") { showSection("status") }
@@ -143,7 +155,7 @@ class MainActivity : Activity() {
             movementMethod = ScrollingMovementMethod.getInstance()
             isVerticalScrollBarEnabled = true
         }
-        root.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(220)).apply {
+        root.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(340)).apply {
             topMargin = dp(8)
         })
 
