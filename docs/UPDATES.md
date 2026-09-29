@@ -145,11 +145,20 @@ Do not commit the keystore.
    - creates or updates the matching GitHub Release
    - attaches the signed APK
 
-The expected release asset name is:
+Each release publishes both:
 
 ```text
+AquaWizNotifier.apk
 AquaWizNotifier-v0.2.0.apk
 ```
+
+`AquaWizNotifier.apk` is the stable filename used by the README's permanent latest-download link:
+
+```text
+https://github.com/stevestokes/AquaWizNotificationsApp/releases/latest/download/AquaWizNotifier.apk
+```
+
+The versioned filename is retained for archival/debugging.
 
 ## First public release
 
