@@ -106,6 +106,18 @@ If a selected optional value is unavailable from AquaWiz, it is omitted rather t
 
 Tapping a measurement notification attempts to open the installed official AquaWiz app. The notifier discovers an installed launcher activity whose visible label is `AquaWiz`, excludes its own package, and falls back to AquaWiz Notifier if the official app cannot be found.
 
+## AquaWiz session-conflict handling
+
+Real-device behavior indicates AquaWiz may invalidate an older token when the same account logs in again. The notifier therefore treats `401`/`403` from measurement polling as a session conflict:
+
+1. mark monitoring as paused
+2. clear the next scheduled poll timestamp
+3. stop chaining measurement polls
+4. show an Android notification explaining that automatic login was intentionally avoided
+5. require a deliberate user-initiated **Sign in & start** before monitoring resumes
+
+The background worker never calls the password-login endpoint as a recovery action. This prevents repeated polling from continuously taking the active session away from the official AquaWiz app.
+
 ## Deduplication
 
 Fingerprints prefer a server measurement ID when present. Otherwise they use:
@@ -197,7 +209,7 @@ The most recently stored measurement is also used by **Test notification**. Befo
 
 - `MeasurementWorker`
   - background fetch
-  - one-time token refresh
+  - no background re-authentication after 401/403
   - deduplication
   - notification
   - error logging

@@ -10,19 +10,16 @@ class MeasurementWorker(context: Context, params: WorkerParameters) : Worker(con
         val store = SecureStore(applicationContext)
         store.setLastPollEpochMs(System.currentTimeMillis())
         store.appendActivity("Checking AquaWiz for a new measurement")
-        var session = store.session() ?: return Result.success()
+        if (store.authPaused()) {
+            store.appendActivity("AquaWiz polling skipped: monitoring is paused after an authentication conflict")
+            return Result.success()
+        }
+        val session = store.session() ?: return Result.success()
         val serial = store.selectedDevice() ?: session.devices.firstOrNull() ?: return Result.success()
         val api = AquaWizApi(store.baseUrl())
 
         try {
-            val measurement = try {
-                api.latestMeasurement(session, serial)
-            } catch (e: AquaWizApi.ApiException) {
-                if (e.status != 401 && e.status != 403) throw e
-                session = api.login(session.username, session.password)
-                store.saveSession(session)
-                api.latestMeasurement(session, serial)
-            }
+            val measurement = api.latestMeasurement(session, serial)
 
             store.setLastError(null)
             val previousFingerprint = store.lastFingerprint()
@@ -50,7 +47,13 @@ class MeasurementWorker(context: Context, params: WorkerParameters) : Worker(con
         } catch (e: AquaWizApi.ApiException) {
             store.setLastError(e.message ?: "AquaWiz API error")
             store.appendActivity("AquaWiz API error: " + (e.message ?: "unknown error"))
-            if (e.status == 401 || e.status == 403) Notifier.signInRequired(applicationContext)
+            if (e.status == 401 || e.status == 403) {
+                store.setAuthPaused(true)
+                store.clearNextPollEpochMs()
+                store.appendActivity("Monitoring paused after AquaWiz rejected the notifier session. Automatic re-login is disabled to avoid logging the official AquaWiz app out.")
+                Notifier.signInRequired(applicationContext)
+                return Result.success()
+            }
             PollScheduler.schedule(applicationContext, Instant.now().plusSeconds(15 * 60))
             return Result.success()
         } catch (e: Exception) {

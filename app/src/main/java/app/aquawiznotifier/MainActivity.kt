@@ -162,6 +162,11 @@ class MainActivity : Activity() {
         val checkNow = Button(this).apply {
             text = "Check now"
             setOnClickListener {
+                if (store.authPaused()) {
+                    toast("Monitoring is paused after an AquaWiz session conflict")
+                    showSection("config")
+                    return@setOnClickListener
+                }
                 saveConfig()
                 store.appendActivity("Manual AquaWiz check queued")
                 PollScheduler.start(this@MainActivity, true)
@@ -274,6 +279,7 @@ class MainActivity : Activity() {
             }
         }
 
+        root.addView(textView("Important: AquaWiz appears to invalidate older sessions when a new login occurs. Signing in here may sign the official AquaWiz app out. Background polling will never auto-login if its token is later rejected.", 12f))
         root.addView(signIn, full())
         root.addView(test, full())
         root.addView(updates, full())
@@ -335,6 +341,7 @@ class MainActivity : Activity() {
                 val api = AquaWizApi(store.baseUrl())
                 val session = api.login(u, p)
                 store.clearMonitoringState()
+                store.setAuthPaused(false)
                 store.saveSession(session)
                 val chosenSerial = typedSerial.ifBlank { session.devices.firstOrNull().orEmpty() }
 
@@ -426,7 +433,11 @@ class MainActivity : Activity() {
             lines += "Latest GitHub release: " + latest + update
         }
         store.lastUpdateError()?.let { lines += "Update check: " + it }
-        lines += if (session == null) "Status: not signed in" else "Status: signed in as " + session.username
+        lines += when {
+            store.authPaused() -> "Status: monitoring paused (AquaWiz session conflict)"
+            session == null -> "Status: not signed in"
+            else -> "Status: signed in as " + session.username
+        }
         store.selectedDevice()?.let { lines += "Device: " + it }
 
         store.lastStoredMeasurement()?.let { (_, measurement) ->

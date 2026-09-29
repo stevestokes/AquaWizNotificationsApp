@@ -78,6 +78,7 @@ class SecureStore(context: Context) {
             .remove("last_poll_ms")
             .remove("next_poll_ms")
             .remove("last_error")
+            .remove("auth_paused")
             .apply()
     }
 
@@ -95,6 +96,9 @@ class SecureStore(context: Context) {
     fun setLastError(v: String?) = prefs.edit().apply { if (v.isNullOrBlank()) remove("last_error") else putString("last_error", v.take(500)) }.apply()
     fun nextPollEpochMs(): Long? = if (prefs.contains("next_poll_ms")) prefs.getLong("next_poll_ms", 0) else null
     fun setNextPollEpochMs(v: Long) = prefs.edit().putLong("next_poll_ms", v).apply()
+    fun clearNextPollEpochMs() = prefs.edit().remove("next_poll_ms").apply()
+    fun authPaused(): Boolean = prefs.getBoolean("auth_paused", false)
+    fun setAuthPaused(v: Boolean) = prefs.edit().putBoolean("auth_paused", v).apply()
     fun measurementIntervalMinutes(): Long = prefs.getLong("measurement_interval", 60L).coerceIn(15L, 24L * 60L)
     fun setMeasurementIntervalMinutes(v: Long) = prefs.edit().putLong("measurement_interval", v.coerceIn(15L, 24L * 60L)).apply()
     fun baseUrl(): String = prefs.getString("base_url", AquaWizApi.GLOBAL_BASE) ?: AquaWizApi.GLOBAL_BASE

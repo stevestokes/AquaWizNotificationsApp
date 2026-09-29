@@ -192,3 +192,8 @@ The public build uses app version `0.4.0`, the selected white/blue launcher icon
 ## 0.4.0 UI/history changes
 
 Version `0.4.0` introduces the three-tab Status / History / Config interface, local full-field measurement history, baseline/history persistence independent of notification toggles, Config-first startup when required setup is missing, and test notifications that reuse the most recent real stored measurement when available.
+
+
+## 0.4.3 session-safety change
+
+Version `0.4.3` removes automatic AquaWiz password re-login from background measurement polling. If the stored bearer token receives `401` or `403`, monitoring pauses rather than authenticating again. This change is based on real-device evidence that a new AquaWiz login can invalidate the session used by the official app.

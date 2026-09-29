@@ -27,7 +27,7 @@ Android only. This is a sideloaded APK. On first install, Android may ask you to
 - Individual on/off controls for pH(O), ΔpH, and Dose.
 - Adaptive polling anchored to the controller's actual measurement timestamp.
 - Encrypted AquaWiz credentials/token storage using Android Keystore.
-- Automatic re-login when the AquaWiz token expires.
+- Background polling never auto-logs in after an AquaWiz session rejection; monitoring pauses instead to avoid disrupting the official AquaWiz app session.
 - Three-section app UI: **Status**, **History**, and **Config**.
 - Persistent, auto-scrolling activity/diagnostic log in the Status tab.
 - Local measurement History stores every retrieved measurement and all available values regardless of notification-display settings.
@@ -38,6 +38,12 @@ Android only. This is a sideloaded APK. On first install, Android may ask you to
 - GitHub and Reef2Reef links directly in the app.
 - Measurement notifications open the installed official AquaWiz app when tapped; if AquaWiz is not installed, AquaWiz Notifier opens instead.
 - Custom white/blue AquaWiz Notifier launcher icon for the public build.
+
+## AquaWiz session behavior
+
+Real-device testing indicates AquaWiz may invalidate an older account session when a new login occurs. To avoid a token ping-pong where the notifier repeatedly signs the official AquaWiz app out, background polling **does not automatically re-authenticate** after a `401` or `403` response.
+
+If AquaWiz rejects the notifier token, monitoring pauses and the app records the conflict in Status. A deliberate **Sign in & start** is required to authenticate again, and doing so may invalidate the current session in the official AquaWiz app.
 
 ## Measurement timing
 
