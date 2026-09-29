@@ -202,13 +202,19 @@ object MeasurementJson {
             val fields = row.optJSONObject(1) ?: continue
             val kh = khFromField22(fields.opt("field22")) ?: continue
             if (kh !in 2.0..20.0) continue
-            val ph = phFromField23(fields.opt("field23"))
+            val ph = phFromField27(fields.opt("field27"))
+            val phOpenAir = phFromField28(fields.opt("field28"))
+            val deltaPh = if (ph != null && phOpenAir != null) ph - phOpenAir else null
+            val doseMl = doseFromField26(fields.opt("field26"))
             out += Candidate(
                 Measurement(
                     kh = kh,
                     measuredAt = measuredAt,
                     rawId = "graph:" + measuredAt.toEpochMilli(),
                     ph = ph,
+                    phOpenAir = phOpenAir,
+                    deltaPh = deltaPh,
+                    doseMl = doseMl,
                 ),
                 preferredSerial,
             )
@@ -222,11 +228,22 @@ object MeasurementJson {
         return if (raw > 20.0) raw / 1000.0 else raw
     }
 
-    private fun phFromField23(value: Any?): Double? {
+    private fun phFromField27(value: Any?): Double? {
         val raw = asDouble(value) ?: return null
-        // Official transformKhRawValue(field23) => formatNumber(Number(value) / 100, 3).
-        val scaled = if (raw > 12.0) raw / 100.0 else raw
+        val scaled = if (raw > 12.0) raw / 1000.0 else raw
         return scaled.takeIf { it in 4.0..12.0 }
+    }
+
+    private fun phFromField28(value: Any?): Double? {
+        val raw = asDouble(value) ?: return null
+        val scaled = if (raw > 12.0) raw / 1000.0 else raw
+        return scaled.takeIf { it in 4.0..12.0 }
+    }
+
+    private fun doseFromField26(value: Any?): Double? {
+        val raw = asDouble(value) ?: return null
+        val scaled = if (raw > 100.0) raw / 5000.0 else raw
+        return scaled.takeIf { it >= 0.0 }
     }
 
     private fun walk(v: Any?, out: MutableList<Candidate>, inheritedSerial: String?) {
@@ -246,8 +263,22 @@ object MeasurementJson {
         if (kh !in 2.0..20.0) return null
         val whenAt = instant(o, timeKeys) ?: return null
         val id = string(o, idKeys)
-        val ph = number(o, phKeys)?.takeIf { it in 4.0..12.0 }
-        return Measurement(kh = kh, measuredAt = whenAt, rawId = id, ph = ph)
+        val ph = number(o, phKeys)?.takeIf { it in 4.0..12.0 } ?: phFromField27(o.opt("field27"))
+        val phOpenAir = number(o, listOf("phOpenAir", "ph_open_air", "phO", "ph_o"))
+            ?.takeIf { it in 4.0..12.0 } ?: phFromField28(o.opt("field28"))
+        val deltaPh = number(o, listOf("deltaPh", "delta_ph", "delta"))
+            ?: if (ph != null && phOpenAir != null) ph - phOpenAir else null
+        val doseMl = number(o, listOf("doseMl", "dose_ml", "dailyDosingTotal", "dosingMl", "dosing_ml"))
+            ?: doseFromField26(o.opt("field26"))
+        return Measurement(
+            kh = kh,
+            measuredAt = whenAt,
+            rawId = id,
+            ph = ph,
+            phOpenAir = phOpenAir,
+            deltaPh = deltaPh,
+            doseMl = doseMl,
+        )
     }
 
     /**
