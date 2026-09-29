@@ -1,0 +1,2 @@
+# AquaWizNotificationsApp
+AquaWiz - Notifications App
