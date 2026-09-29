@@ -1,4 +1,4 @@
-name: Tagged APK
+name: Tagged APK Release
 
 on:
   push:
@@ -6,26 +6,62 @@ on:
       - 'v*'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  apk:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
+
       - name: Install Android SDK
         run: |
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
-      - name: Build tested sideload APK
-        run: ./scripts/verify.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: AquaWizNotifier-${{ github.ref_name }}
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+
+      - name: Validate signing secrets
+        env:
+          KEYSTORE_B64: ${{ secrets.AQUAWIZ_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.AQUAWIZ_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.AQUAWIZ_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.AQUAWIZ_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_B64" || (echo "Missing AQUAWIZ_KEYSTORE_BASE64" && exit 1)
+          test -n "$KEYSTORE_PASSWORD" || (echo "Missing AQUAWIZ_KEYSTORE_PASSWORD" && exit 1)
+          test -n "$KEY_ALIAS" || (echo "Missing AQUAWIZ_KEY_ALIAS" && exit 1)
+          test -n "$KEY_PASSWORD" || (echo "Missing AQUAWIZ_KEY_PASSWORD" && exit 1)
+
+      - name: Restore release keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.AQUAWIZ_KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/aquawiz-release.jks"
+
+      - name: Test and build signed release APK
+        env:
+          AQUAWIZ_KEYSTORE_PATH: ${{ runner.temp }}/aquawiz-release.jks
+          AQUAWIZ_KEYSTORE_PASSWORD: ${{ secrets.AQUAWIZ_KEYSTORE_PASSWORD }}
+          AQUAWIZ_KEY_ALIAS: ${{ secrets.AQUAWIZ_KEY_ALIAS }}
+          AQUAWIZ_KEY_PASSWORD: ${{ secrets.AQUAWIZ_KEY_PASSWORD }}
+        run: |
+          ./gradlew testDebugUnitTest assembleRelease
+          test -f app/build/outputs/apk/release/app-release.apk
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK="app/build/outputs/apk/release/app-release.apk"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$APK#AquaWizNotifier-$GITHUB_REF_NAME.apk" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$APK#AquaWizNotifier-$GITHUB_REF_NAME.apk" \
+              --title "AquaWiz Notifier $GITHUB_REF_NAME" \
+              --generate-notes
+          fi
