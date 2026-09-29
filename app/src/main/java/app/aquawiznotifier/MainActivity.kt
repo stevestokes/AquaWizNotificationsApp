@@ -4,8 +4,11 @@ import android.Manifest
 import android.app.Activity
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.InputType
 import android.text.method.LinkMovementMethod
+import android.text.method.ScrollingMovementMethod
 import android.text.util.Linkify
 import android.view.Gravity
 import android.view.ViewGroup
@@ -21,12 +24,18 @@ class MainActivity : Activity() {
     private lateinit var serial: EditText
     private lateinit var interval: EditText
     private lateinit var status: TextView
-    private lateinit var statusScroll: ScrollView
     private lateinit var phOpenAirCheck: CheckBox
     private lateinit var deltaPhCheck: CheckBox
     private lateinit var doseCheck: CheckBox
     private lateinit var region: Spinner
     private val fmt = DateTimeFormatter.ofPattern("MMM d, h:mm a").withZone(ZoneId.systemDefault())
+    private val uiHandler = Handler(Looper.getMainLooper())
+    private val refreshRunnable = object : Runnable {
+        override fun run() {
+            if (::status.isInitialized) updateStatus()
+            uiHandler.postDelayed(this, 3000L)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,6 +50,13 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (::status.isInitialized) updateStatus()
+        uiHandler.removeCallbacks(refreshRunnable)
+        uiHandler.postDelayed(refreshRunnable, 3000L)
+    }
+
+    override fun onPause() {
+        uiHandler.removeCallbacks(refreshRunnable)
+        super.onPause()
     }
 
     private fun buildUi(): ScrollView {
@@ -78,9 +94,18 @@ class MainActivity : Activity() {
         root.addView(username, full()); root.addView(password, full()); root.addView(serial, full()); root.addView(interval, full())
 
         root.addView(text("Notification details", 15f))
-        phOpenAirCheck = CheckBox(this).apply { text = "Show pH(O)" }
-        deltaPhCheck = CheckBox(this).apply { text = "Show ΔpH" }
-        doseCheck = CheckBox(this).apply { text = "Show Dose (mL)" }
+        phOpenAirCheck = CheckBox(this).apply {
+            text = "Show pH(O)"
+            setOnCheckedChangeListener { _, checked -> store.setShowPhOpenAir(checked) }
+        }
+        deltaPhCheck = CheckBox(this).apply {
+            text = "Show ΔpH"
+            setOnCheckedChangeListener { _, checked -> store.setShowDeltaPh(checked) }
+        }
+        doseCheck = CheckBox(this).apply {
+            text = "Show Dose (mL)"
+            setOnCheckedChangeListener { _, checked -> store.setShowDoseMl(checked) }
+        }
         root.addView(phOpenAirCheck, full())
         root.addView(deltaPhCheck, full())
         root.addView(doseCheck, full())
@@ -96,12 +121,10 @@ class MainActivity : Activity() {
         status = text("", 13f).apply {
             setPadding(dp(10), dp(10), dp(10), dp(10))
             setTextIsSelectable(true)
+            movementMethod = ScrollingMovementMethod.getInstance()
+            isVerticalScrollBarEnabled = true
         }
-        statusScroll = ScrollView(this).apply {
-            isFillViewport = true
-            addView(status)
-        }
-        root.addView(statusScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(240)).apply { topMargin = dp(6) })
+        root.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(240)).apply { topMargin = dp(6) })
         return scroll
     }
 
@@ -211,8 +234,12 @@ class MainActivity : Activity() {
             append("\n\n--- Activity ---\n")
             if (activity.isBlank()) append("No activity logged yet.") else append(activity)
         }
-        if (::statusScroll.isInitialized) {
-            statusScroll.post { statusScroll.fullScroll(android.view.View.FOCUS_DOWN) }
+        status.post {
+            val layout = status.layout
+            if (layout != null) {
+                val y = (layout.height - status.height + status.compoundPaddingBottom).coerceAtLeast(0)
+                status.scrollTo(0, y)
+            }
         }
     }
 
