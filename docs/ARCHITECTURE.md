@@ -2,22 +2,9 @@
 
 ## Goal
 
-Notify once for every newly observed AquaWiz KH measurement, whether or not the value is outside an AquaWiz alert range.
+Notify once for every newly observed AquaWiz KH measurement, whether or not the reading is outside an AquaWiz alert threshold.
 
-## Poll timing
-
-For an hourly measurement interval, a measurement at `T` anchors the next probes at:
-
-- `T + 17m`
-- `T + 32m`
-- `T + 47m`
-- `T + 62m`
-
-The fourth probe is therefore eligible two minutes after the next expected hourly result. Any newly observed result immediately re-anchors the schedule to that result's server timestamp.
-
-If there is still no new result at `T+62`, probes continue every 15 minutes from that sequence: `T+77`, `T+92`, and so on. A late result re-anchors the next four-probe sequence to the late result's actual measurement timestamp.
-
-This is implemented as chained one-time WorkManager jobs rather than a periodic worker because the desired eligibility time moves whenever a measurement arrives. Android may defer actual execution due to Doze, standby buckets, connectivity, OEM battery management, and other OS scheduling constraints. The calculated time is therefore the earliest eligible time, not a real-time guarantee.
+The app is intentionally Android-first and dependency-light.
 
 ## Measurement flow
 
@@ -25,42 +12,224 @@ This is implemented as chained one-time WorkManager jobs rather than a periodic 
 WorkManager wakes
       |
       v
-POST all_field  ---- parse/match selected serial ----+
-      | failed/changed schema                         |
-      v                                               |
-GET serial-specific graph ---- conservative parse ----+
+POST device-scoped all_field
+      |
+      | parse current KH / latest pH
+      | if unavailable or incompatible
+      v
+GET serial-specific graph
+      |
+      | parse field22 / field26 / field27 / field28
+      v
+Build Measurement model
       |
       v
 measurement fingerprint == stored fingerprint?
       | yes                         | no
       v                             v
-schedule next probe          save + Android notification
+schedule next probe          save measurement
+                             notify once
+                             append activity log
                                     |
                                     v
-                            re-anchor to measurement time
+                            re-anchor schedule to
+                            AquaWiz measurement time
 ```
 
-## Components
+## Poll timing
 
-- `MainActivity`: simple setup/status UI.
-- `AquaWizApi`: login, `all_field`, graph fallback, and HTTP error handling.
-- `MeasurementJson`: serial-aware defensive response parser.
-- `SecureStore`: AES-GCM encryption backed by Android Keystore for credentials/session plus monitoring state.
-- `MeasurementWorker`: fetch, one-time token refresh, dedupe, notify, error recording, and rescheduling.
-- `PollCadence`: pure scheduling math.
-- `PollScheduler`: chained one-time WorkManager jobs with a connected-network constraint.
-- `Notifier`: local Android notification channel and formatting.
+For an hourly controller interval, a measurement at `T` anchors the next probes at:
+
+- `T + 17m`
+- `T + 32m`
+- `T + 47m`
+- `T + 62m`
+
+The fourth probe is therefore two minutes after the next expected hourly result.
+
+If there is still no new result at `T+62`, checks continue every 15 minutes from that sequence:
+
+- `T+77`
+- `T+92`
+- etc.
+
+A new result immediately re-anchors the sequence to the new measurement's actual timestamp.
+
+The app uses chained one-time WorkManager jobs rather than a simple fixed periodic worker because the desired schedule changes whenever AquaWiz produces a result.
+
+Android may defer jobs because of Doze, standby buckets, connectivity, or OEM battery management. Scheduled times are therefore earliest-eligible times rather than hard real-time deadlines.
+
+## Measurement model
+
+`Measurement` currently contains:
+
+- `kh`
+- `ph`
+- `phOpenAir` / pH(O)
+- `deltaPh`
+- `doseMl`
+- `measuredAt`
+- optional raw/server measurement ID
+
+Known KH-series graph mappings:
+
+| Field | Meaning | Transform |
+| --- | --- | --- |
+| `field22` | dKH | / 1000 |
+| `field26` | Dose (mL) | / 5000 |
+| `field27` | tank pH | / 1000 |
+| `field28` | pH(O) | / 1000 |
+| derived | ΔpH | pH - pH(O) |
 
 ## Notification semantics
 
-The first reading after setup/sign-in is treated as the baseline and does **not** create a potentially stale notification. Every subsequently detected reading with a different fingerprint does.
+The first successfully read measurement after setup/sign-in becomes the baseline and does **not** notify.
 
-Fingerprints prefer a server measurement ID when present; otherwise they use measurement timestamp + KH value. This prevents the 15-minute probes from creating duplicate notifications for the same AquaWiz result.
+Every subsequently detected measurement with a different fingerprint generates one notification.
 
-A notification shows the KH value, the AquaWiz measurement time, the change from the previous KH reading, and pH when the API provides it.
+The notification layout is:
+
+```text
+[KH1-00-05117] 8.42 dKH, 8.27 pH
+pH(O) 8.35 • ΔpH -0.08 • Dose 1.20 mL
+Measured 1:04 PM • ↑ 0.06 dKH
+```
+
+The optional second-line fields are individually configurable:
+
+- pH(O)
+- ΔpH
+- Dose (mL)
+
+If a selected optional value is unavailable from AquaWiz, it is omitted rather than replaced with a guessed value.
+
+## Deduplication
+
+Fingerprints prefer a server measurement ID when present. Otherwise they use:
+
+```text
+measurement timestamp + KH
+```
+
+This prevents repeated 15-minute checks from generating duplicate notifications for the same measurement.
+
+## Activity / diagnostics
+
+`SecureStore` keeps a rolling activity log of up to 5,000 local entries.
+
+Events include:
+
+- sign-in attempts and failures
+- background AquaWiz checks
+- baseline creation
+- detected measurements
+- API/network errors
+- update checks
+- available versions
+
+`MainActivity` displays this data in a fixed-height nested ScrollView and automatically scrolls to the bottom after refresh so the newest event remains visible.
+
+## Components
+
+- `MainActivity`
+  - setup/status UI
+  - notification detail checkboxes
+  - manual AquaWiz check
+  - manual update check
+  - auto-scrolling activity console
+  - GitHub/Reef2Reef links
+
+- `AquaWizApi`
+  - login
+  - device-scoped `all_field`
+  - graph fallback
+  - official graph transforms
+  - HTTP error handling
+
+- `MeasurementJson`
+  - current-value parsing
+  - graph row parsing
+  - serial-aware candidate selection
+  - defensive numeric validation
+
+- `SecureStore`
+  - Android Keystore-backed encrypted AquaWiz session
+  - monitoring state
+  - notification preferences
+  - update state
+  - activity history
+
+- `MeasurementWorker`
+  - background fetch
+  - one-time token refresh
+  - deduplication
+  - notification
+  - error logging
+  - rescheduling
+
+- `PollCadence`
+  - pure adaptive timing math
+
+- `PollScheduler`
+  - chained one-time WorkManager requests
+
+- `Notifier`
+  - measurement notifications
+  - sign-in-required notification
+  - update-available notification
+
+- `UpdateChecker`
+  - public GitHub Releases API client
+  - semantic version comparison
+  - startup/manual/daily update scheduling
+
+- `UpdateWorker`
+  - background GitHub Releases check
+
+## GitHub update flow
+
+```text
+App opens / daily WorkManager / manual button
+                 |
+                 v
+GET GitHub releases/latest
+                 |
+                 v
+compare tag vs BuildConfig.VERSION_NAME
+       | same/older             | newer
+       v                        v
+store latest version      notification:
+                         "Update available"
+                                |
+                                v
+                       tap opens GitHub Release
+```
+
+No GitHub token is embedded in the application. This requires the repository and release to be publicly readable.
+
+## Release signing
+
+GitHub Release APKs must use one stable Android signing key.
+
+The tagged workflow reconstructs the release keystore from GitHub Actions secrets and runs `assembleRelease`.
+
+If the signing key changes or is lost, Android will not accept a future APK as an upgrade to an existing installation.
 
 ## Security
 
-The app needs the AquaWiz password so it can perform the same login again when an undocumented cloud token expires. Username, password, token, and device list are serialized together and encrypted using AES-GCM with a non-exportable key stored in Android Keystore. Android backup is disabled in the manifest.
+AquaWiz username, password, cloud token, and device list are serialized and encrypted with AES-GCM. The AES key is non-exportable and stored in Android Keystore.
 
-The project does not operate a relay server, analytics service, crash collector, or push-notification backend. AquaWiz credentials stay on the Android device and are sent only to the configured AquaWiz API host.
+Android backup is disabled.
+
+The app does not operate:
+
+- a project-owned backend
+- a notification relay
+- analytics
+- a crash collection service
+
+Network destinations are limited to:
+
+- the selected AquaWiz HTTPS API host
+- the public GitHub Releases API for update metadata
+- the user's browser when opening project/release links
