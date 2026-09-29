@@ -9,6 +9,7 @@ class MeasurementWorker(context: Context, params: WorkerParameters) : Worker(con
     override fun doWork(): Result {
         val store = SecureStore(applicationContext)
         store.setLastPollEpochMs(System.currentTimeMillis())
+        store.appendActivity("Checking AquaWiz for a new measurement")
         var session = store.session() ?: return Result.success()
         val serial = store.selectedDevice() ?: session.devices.firstOrNull() ?: return Result.success()
         val api = AquaWizApi(store.baseUrl())
@@ -30,7 +31,12 @@ class MeasurementWorker(context: Context, params: WorkerParameters) : Worker(con
             val isNew = previousFingerprint != measurement.fingerprint
 
             if (isNew) {
-                if (!isFirstBaseline) Notifier.measurement(applicationContext, measurement, previousKh)
+                if (!isFirstBaseline) {
+                    Notifier.measurement(applicationContext, serial, measurement, previousKh)
+                    store.appendActivity("New measurement: [" + serial + "] " + "%.2f".format(measurement.kh) + " dKH" + (measurement.ph?.let { ", " + "%.2f".format(it) + " pH" } ?: ""))
+                } else {
+                    store.appendActivity("Baseline established for " + serial + " at " + "%.2f".format(measurement.kh) + " dKH")
+                }
                 store.setLastFingerprint(measurement.fingerprint)
                 store.setLastMeasurementEpochMs(measurement.measuredAt.toEpochMilli())
                 store.setLastKh(measurement.kh)
@@ -42,12 +48,14 @@ class MeasurementWorker(context: Context, params: WorkerParameters) : Worker(con
             return Result.success()
         } catch (e: AquaWizApi.ApiException) {
             store.setLastError(e.message ?: "AquaWiz API error")
+            store.appendActivity("AquaWiz API error: " + (e.message ?: "unknown error"))
             if (e.status == 401 || e.status == 403) Notifier.signInRequired(applicationContext)
             // Keep the chain alive. 15 minutes is short enough to recover from transient API/network errors.
             PollScheduler.schedule(applicationContext, Instant.now().plusSeconds(15 * 60))
             return Result.success()
         } catch (e: Exception) {
             store.setLastError(e.message ?: e.javaClass.simpleName)
+            store.appendActivity("Background check error: " + (e.message ?: e.javaClass.simpleName))
             PollScheduler.schedule(applicationContext, Instant.now().plusSeconds(15 * 60))
             return Result.success()
         }
