@@ -21,6 +21,10 @@ class MainActivity : Activity() {
     private lateinit var serial: EditText
     private lateinit var interval: EditText
     private lateinit var status: TextView
+    private lateinit var statusScroll: ScrollView
+    private lateinit var phOpenAirCheck: CheckBox
+    private lateinit var deltaPhCheck: CheckBox
+    private lateinit var doseCheck: CheckBox
     private lateinit var region: Spinner
     private val fmt = DateTimeFormatter.ofPattern("MMM d, h:mm a").withZone(ZoneId.systemDefault())
 
@@ -73,15 +77,31 @@ class MainActivity : Activity() {
         interval = field("Measurement interval in minutes (default 60)").apply { inputType = InputType.TYPE_CLASS_NUMBER }
         root.addView(username, full()); root.addView(password, full()); root.addView(serial, full()); root.addView(interval, full())
 
+        root.addView(text("Notification details", 15f))
+        phOpenAirCheck = CheckBox(this).apply { text = "Show pH(O)" }
+        deltaPhCheck = CheckBox(this).apply { text = "Show ΔpH" }
+        doseCheck = CheckBox(this).apply { text = "Show Dose (mL)" }
+        root.addView(phOpenAirCheck, full())
+        root.addView(deltaPhCheck, full())
+        root.addView(doseCheck, full())
+
         val signIn = Button(this).apply { text = "Sign in & start"; setOnClickListener { signIn() } }
-        val checkNow = Button(this).apply { text = "Check now"; setOnClickListener { saveConfig(); PollScheduler.start(this@MainActivity, true); toast("Check queued") } }
+        val checkNow = Button(this).apply { text = "Check now"; setOnClickListener { saveConfig(); store.appendActivity("Manual AquaWiz check queued"); PollScheduler.start(this@MainActivity, true); toast("Check queued"); updateStatus() } }
         val test = Button(this).apply { text = "Test notification"; setOnClickListener { Notifier.test(this@MainActivity) } }
-        val updates = Button(this).apply { text = "Check for updates"; setOnClickListener { UpdateChecker.checkNow(this@MainActivity); toast("Update check queued") } }
-        val stop = Button(this).apply { text = "Stop & sign out"; setOnClickListener { PollScheduler.cancel(this@MainActivity); store.clearSession(); store.clearMonitoringState(); toast("Stopped"); updateStatus() } }
+        val updates = Button(this).apply { text = "Check for updates"; setOnClickListener { store.appendActivity("Manual update check queued"); UpdateChecker.checkNow(this@MainActivity); toast("Update check queued"); updateStatus() } }
+        val stop = Button(this).apply { text = "Stop & sign out"; setOnClickListener { store.appendActivity("Monitoring stopped and AquaWiz session cleared"); PollScheduler.cancel(this@MainActivity); store.clearSession(); store.clearMonitoringState(); toast("Stopped"); updateStatus() } }
         root.addView(signIn, full()); root.addView(checkNow, full()); root.addView(test, full()); root.addView(updates, full()); root.addView(stop, full())
 
-        status = text("", 15f).apply { setPadding(0, dp(18), 0, 0) }
-        root.addView(status, full())
+        root.addView(text("Activity / diagnostics", 15f).apply { setPadding(0, dp(18), 0, 0) })
+        status = text("", 13f).apply {
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            setTextIsSelectable(true)
+        }
+        statusScroll = ScrollView(this).apply {
+            isFillViewport = true
+            addView(status)
+        }
+        root.addView(statusScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(240)).apply { topMargin = dp(6) })
         return scroll
     }
 
@@ -99,6 +119,7 @@ class MainActivity : Activity() {
         if (u.isBlank() || p.isBlank()) { toast("Enter username and password"); return }
         saveConfig()
         status.text = "Signing in…"
+        store.appendActivity("Signing in to AquaWiz")
 
         Thread {
             try {
@@ -131,11 +152,13 @@ class MainActivity : Activity() {
 
                 runOnUiThread {
                     if (typedSerial.isBlank() && chosenSerial.isNotBlank()) serial.setText(chosenSerial)
+                    store.appendActivity(if (chosenSerial.isBlank()) "Signed in; device serial still required" else "Signed in; monitoring " + chosenSerial)
                     toast(if (chosenSerial.isBlank()) "Signed in. Enter your device serial." else "Signed in. Monitoring started.")
                     updateStatus()
                 }
             } catch (e: Exception) {
-                runOnUiThread { status.text = "Sign-in failed: ${e.message}" }
+                store.appendActivity("Sign-in failed: " + (e.message ?: e.javaClass.simpleName))
+                runOnUiThread { updateStatus() }
             }
         }.start()
     }
@@ -144,6 +167,9 @@ class MainActivity : Activity() {
         store.setBaseUrl(if (region.selectedItemPosition == 1) AquaWizApi.CHINA_BASE else AquaWizApi.GLOBAL_BASE)
         serial.text.toString().trim().takeIf { it.isNotBlank() }?.let(store::setSelectedDevice)
         interval.text.toString().toLongOrNull()?.let(store::setMeasurementIntervalMinutes)
+        store.setShowPhOpenAir(phOpenAirCheck.isChecked)
+        store.setShowDeltaPh(deltaPhCheck.isChecked)
+        store.setShowDoseMl(doseCheck.isChecked)
     }
 
     private fun populate() {
@@ -153,6 +179,9 @@ class MainActivity : Activity() {
         serial.setText(store.selectedDevice() ?: s?.devices?.firstOrNull().orEmpty())
         interval.setText(store.measurementIntervalMinutes().toString())
         region.setSelection(if (store.baseUrl().contains(".cn")) 1 else 0)
+        phOpenAirCheck.isChecked = store.showPhOpenAir()
+        deltaPhCheck.isChecked = store.showDeltaPh()
+        doseCheck.isChecked = store.showDoseMl()
         updateStatus()
     }
 
@@ -176,7 +205,15 @@ class MainActivity : Activity() {
         store.nextPollEpochMs()?.let { lines += "Next eligible check: ${fmt.format(Instant.ofEpochMilli(it))}" }
         lines += "Cadence: ${PollCadence.probeOffsetsMinutes(store.measurementIntervalMinutes()).joinToString { "+${it}m" }} from each measurement"
         lines += "Note: Android may defer background work during Doze/battery optimization."
-        status.text = lines.joinToString("\n")
+        val activity = store.activityLog()
+        status.text = buildString {
+            append(lines.joinToString("\n"))
+            append("\n\n--- Activity ---\n")
+            if (activity.isBlank()) append("No activity logged yet.") else append(activity)
+        }
+        if (::statusScroll.isInitialized) {
+            statusScroll.post { statusScroll.fullScroll(android.view.View.FOCUS_DOWN) }
+        }
     }
 
     private fun requestNotifications() {
