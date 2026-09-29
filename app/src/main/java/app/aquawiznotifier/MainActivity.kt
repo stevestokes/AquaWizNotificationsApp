@@ -31,6 +31,7 @@ class MainActivity : Activity() {
         requestNotifications()
         setContentView(buildUi())
         populate()
+        UpdateChecker.schedule(this)
     }
 
     override fun onResume() {
@@ -75,8 +76,9 @@ class MainActivity : Activity() {
         val signIn = Button(this).apply { text = "Sign in & start"; setOnClickListener { signIn() } }
         val checkNow = Button(this).apply { text = "Check now"; setOnClickListener { saveConfig(); PollScheduler.start(this@MainActivity, true); toast("Check queued") } }
         val test = Button(this).apply { text = "Test notification"; setOnClickListener { Notifier.test(this@MainActivity) } }
+        val updates = Button(this).apply { text = "Check for updates"; setOnClickListener { UpdateChecker.checkNow(this@MainActivity); toast("Update check queued") } }
         val stop = Button(this).apply { text = "Stop & sign out"; setOnClickListener { PollScheduler.cancel(this@MainActivity); store.clearSession(); store.clearMonitoringState(); toast("Stopped"); updateStatus() } }
-        root.addView(signIn, full()); root.addView(checkNow, full()); root.addView(test, full()); root.addView(stop, full())
+        root.addView(signIn, full()); root.addView(checkNow, full()); root.addView(test, full()); root.addView(updates, full()); root.addView(stop, full())
 
         status = text("", 15f).apply { setPadding(0, dp(18), 0, 0) }
         root.addView(status, full())
@@ -157,6 +159,12 @@ class MainActivity : Activity() {
     private fun updateStatus() {
         val s = store.session()
         val lines = mutableListOf<String>()
+        lines += "App version: ${BuildConfig.VERSION_NAME}"
+        store.latestReleaseVersion()?.let { latest ->
+            val update = if (UpdateChecker.isNewer(latest, BuildConfig.VERSION_NAME)) " (update available)" else ""
+            lines += "Latest GitHub release: $latest$update"
+        }
+        store.lastUpdateError()?.let { lines += "Update check: $it" }
         lines += if (s == null) "Status: not signed in" else "Status: signed in as ${s.username}"
         store.selectedDevice()?.let { lines += "Device: $it" }
         store.lastKh()?.let { kh ->
