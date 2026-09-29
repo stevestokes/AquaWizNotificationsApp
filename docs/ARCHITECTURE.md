@@ -132,13 +132,44 @@ Events include:
 
 `MainActivity` displays this data in a fixed-height independently scrollable text console and automatically scrolls to the bottom after refresh so the newest event remains visible.
 
+## Three-tab UI
+
+The app has three top-level tabs:
+
+- **Status**: live state plus rolling diagnostics/activity. The status console is intentionally slightly shorter than the original single-screen console and auto-scrolls to the latest line.
+- **History**: newest-first local measurement history. Storage is independent of notification display toggles and preserves all available measurement values.
+- **Config**: server/account/device setup, measurement interval, notification detail preferences, test notification, updater controls, and sign-out.
+
+If account/device setup is incomplete, Config is the initial tab. Otherwise Status is the initial tab.
+
+## Local measurement history
+
+Every newly retrieved AquaWiz measurement is persisted locally, including the initial baseline measurement. Entries are deduplicated by device serial plus measurement fingerprint and retained newest-first. The current implementation keeps up to 2,000 measurements.
+
+Stored fields include:
+
+- device serial
+- timestamp
+- dKH
+- pH
+- pH(O)
+- ΔpH
+- Dose (mL)
+- raw/server ID when available
+
+Notification toggles affect only notification presentation; they do not filter History storage.
+
+The most recently stored measurement is also used by **Test notification**. Before any real measurement exists, the test action selects from several normal hard-coded sample readings.
+
 ## Components
 
 - `MainActivity`
-  - setup/status UI
+  - Status / History / Config tab navigation
+  - setup/config controls
   - notification detail checkboxes
   - manual AquaWiz check
   - manual update check
+  - local History rendering
   - auto-scrolling activity console
   - GitHub/Reef2Reef links
 
@@ -158,6 +189,8 @@ Events include:
 - `SecureStore`
   - Android Keystore-backed encrypted AquaWiz session
   - monitoring state
+  - complete local measurement history
+  - last stored measurement snapshot
   - notification preferences
   - update state
   - activity history

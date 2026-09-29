@@ -4,8 +4,10 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import org.json.JSONArray
 import org.json.JSONObject
 import java.security.KeyStore
+import java.time.Instant
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -78,6 +80,7 @@ class SecureStore(context: Context) {
             .remove("last_error")
             .apply()
     }
+
     fun selectedDevice(): String? = prefs.getString("device", null)
     fun setSelectedDevice(serial: String) = prefs.edit().putString("device", serial.trim()).apply()
     fun lastFingerprint(): String? = prefs.getString("last_fingerprint", null)
@@ -110,13 +113,79 @@ class SecureStore(context: Context) {
         if (v.isNullOrBlank()) remove("last_update_error") else putString("last_update_error", v.take(500))
     }.apply()
 
-
     fun showPhOpenAir(): Boolean = prefs.getBoolean("notify_ph_open_air", true)
     fun setShowPhOpenAir(v: Boolean) = prefs.edit().putBoolean("notify_ph_open_air", v).apply()
     fun showDeltaPh(): Boolean = prefs.getBoolean("notify_delta_ph", true)
     fun setShowDeltaPh(v: Boolean) = prefs.edit().putBoolean("notify_delta_ph", v).apply()
     fun showDoseMl(): Boolean = prefs.getBoolean("notify_dose_ml", true)
     fun setShowDoseMl(v: Boolean) = prefs.edit().putBoolean("notify_dose_ml", v).apply()
+
+    fun saveMeasurement(serial: String, measurement: Measurement) {
+        val history = JSONArray(prefs.getString("measurement_history", "[]") ?: "[]")
+        val fingerprint = measurement.fingerprint
+        for (i in 0 until history.length()) {
+            val existing = history.optJSONObject(i) ?: continue
+            if (existing.optString("serial") == serial && existing.optString("fingerprint") == fingerprint) {
+                saveLatestMeasurement(serial, measurement)
+                return
+            }
+        }
+
+        val updated = JSONArray()
+        updated.put(measurementJson(serial, measurement))
+        val keep = minOf(history.length(), 1999)
+        for (i in 0 until keep) updated.put(history.opt(i))
+        prefs.edit().putString("measurement_history", updated.toString()).apply()
+        saveLatestMeasurement(serial, measurement)
+    }
+
+    fun measurementHistory(): List<Pair<String, Measurement>> {
+        val history = runCatching { JSONArray(prefs.getString("measurement_history", "[]") ?: "[]") }.getOrElse { JSONArray() }
+        return buildList {
+            for (i in 0 until history.length()) {
+                val parsed = parseMeasurementJson(history.optJSONObject(i)) ?: continue
+                add(parsed)
+            }
+        }
+    }
+
+    fun lastStoredMeasurement(): Pair<String, Measurement>? {
+        val raw = prefs.getString("last_measurement_json", null) ?: return null
+        return runCatching { parseMeasurementJson(JSONObject(raw)) }.getOrNull()
+    }
+
+    private fun saveLatestMeasurement(serial: String, measurement: Measurement) {
+        prefs.edit().putString("last_measurement_json", measurementJson(serial, measurement).toString()).apply()
+    }
+
+    private fun measurementJson(serial: String, m: Measurement): JSONObject = JSONObject()
+        .put("serial", serial)
+        .put("fingerprint", m.fingerprint)
+        .put("kh", m.kh)
+        .put("measuredAt", m.measuredAt.toEpochMilli())
+        .put("rawId", m.rawId)
+        .put("ph", m.ph)
+        .put("phOpenAir", m.phOpenAir)
+        .put("deltaPh", m.deltaPh)
+        .put("doseMl", m.doseMl)
+
+    private fun parseMeasurementJson(j: JSONObject?): Pair<String, Measurement>? {
+        j ?: return null
+        val serial = j.optString("serial").takeIf { it.isNotBlank() } ?: return null
+        val kh = j.optDouble("kh", Double.NaN).takeIf { !it.isNaN() } ?: return null
+        val measuredAt = j.optLong("measuredAt", 0L).takeIf { it > 0L } ?: return null
+        fun optDoubleOrNull(key: String): Double? =
+            if (!j.has(key) || j.isNull(key)) null else j.optDouble(key, Double.NaN).takeIf { !it.isNaN() }
+        return serial to Measurement(
+            kh = kh,
+            measuredAt = Instant.ofEpochMilli(measuredAt),
+            rawId = if (!j.has("rawId") || j.isNull("rawId")) null else j.optString("rawId").takeIf { it.isNotBlank() },
+            ph = optDoubleOrNull("ph"),
+            phOpenAir = optDoubleOrNull("phOpenAir"),
+            deltaPh = optDoubleOrNull("deltaPh"),
+            doseMl = optDoubleOrNull("doseMl"),
+        )
+    }
 
     fun appendActivity(message: String) {
         val timestamp = java.time.format.DateTimeFormatter.ofPattern("MMM d, h:mm:ss a")
@@ -125,12 +194,10 @@ class SecureStore(context: Context) {
         val line = "[$timestamp] $message"
         val current = prefs.getString("activity_log", "").orEmpty()
         val updated = if (current.isBlank()) line else current + "\n" + line
-        // Keep a generous rolling history so the on-screen log remains responsive for long-running installs.
         val lines = updated.lineSequence().toList()
         val retained = if (lines.size > 5000) lines.takeLast(5000) else lines
         prefs.edit().putString("activity_log", retained.joinToString("\n")).apply()
     }
 
     fun activityLog(): String = prefs.getString("activity_log", "").orEmpty()
-
 }

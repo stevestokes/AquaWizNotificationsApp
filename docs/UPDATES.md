@@ -26,7 +26,7 @@ The update checker works when:
 
 1. the repository is public
 2. at least one non-draft GitHub Release exists
-3. the release tag is a semantic version such as `v0.3.0`
+3. the release tag is a semantic version such as `v0.4.0`
 
 If the repository is private, unauthenticated Android clients cannot read the latest release metadata and the app records that in the local activity log.
 
@@ -54,7 +54,7 @@ Latest version:
 
 ```json
 {
-  "tag_name": "v0.3.0"
+  "tag_name": "v0.4.0"
 }
 ```
 
@@ -62,9 +62,9 @@ The app removes a leading `v` and compares numeric semantic-version components.
 
 Examples:
 
-- installed `0.2.0`, release `v0.3.0` -> no notification
+- installed `0.2.0`, release `v0.4.0` -> no notification
 - installed `0.2.0`, release `v0.2.1` -> update available
-- installed `0.2.9`, release `v0.3.0` -> update available
+- installed `0.2.9`, release `v0.4.0` -> update available
 - installed `0.9.9`, release `v1.0.0` -> update available
 
 Pre-release suffixes are ignored for the numeric comparison.
@@ -75,7 +75,7 @@ When a newer release is discovered, Android displays:
 
 ```text
 AquaWiz Notifier update available
-Version 0.3.0 is available. Tap to update.
+Version 0.4.0 is available. Tap to update.
 ```
 
 The app remembers the last version for which it displayed an update notification, so normal daily checks do not repeatedly notify for the same release.
@@ -135,8 +135,8 @@ Do not commit the keystore.
 4. Confirm Android CI passes.
 5. Create a matching tag:
    ```bash
-   git tag v0.3.0
-   git push origin v0.3.0
+   git tag v0.4.0
+   git push origin v0.4.0
    ```
 6. GitHub Actions:
    - restores the release keystore from secrets
@@ -149,7 +149,7 @@ Each release publishes both:
 
 ```text
 AquaWizNotifier.apk
-AquaWizNotifier-v0.3.0.apk
+AquaWizNotifier-v0.4.0.apk
 ```
 
 `AquaWizNotifier.apk` is the stable filename used by the README's permanent latest-download link:
@@ -186,4 +186,9 @@ This makes updater behavior visible without requiring Android debug tools.
 
 ## Public build behavior
 
-The public build uses app version `0.3.0`, the selected white/blue launcher icon, Alkatronic-style measurement notification wording, and measurement-notification launching into the installed official AquaWiz app when available.
+The public build uses app version `0.4.0`, the selected white/blue launcher icon, Alkatronic-style measurement notification wording, and measurement-notification launching into the installed official AquaWiz app when available.
+
+
+## 0.4.0 UI/history changes
+
+Version `0.4.0` introduces the three-tab Status / History / Config interface, local full-field measurement history, baseline/history persistence independent of notification toggles, Config-first startup when required setup is missing, and test notifications that reuse the most recent real stored measurement when available.

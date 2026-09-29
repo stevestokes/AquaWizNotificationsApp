@@ -31,6 +31,7 @@ class MeasurementWorker(context: Context, params: WorkerParameters) : Worker(con
             val isNew = previousFingerprint != measurement.fingerprint
 
             if (isNew) {
+                store.saveMeasurement(serial, measurement)
                 if (!isFirstBaseline) {
                     Notifier.measurement(applicationContext, serial, measurement, previousKh)
                     store.appendActivity("New measurement: [" + serial + "] " + "%.2f".format(measurement.kh) + " dKH" + (measurement.ph?.let { ", " + "%.2f".format(it) + " pH" } ?: ""))
@@ -50,7 +51,6 @@ class MeasurementWorker(context: Context, params: WorkerParameters) : Worker(con
             store.setLastError(e.message ?: "AquaWiz API error")
             store.appendActivity("AquaWiz API error: " + (e.message ?: "unknown error"))
             if (e.status == 401 || e.status == 403) Notifier.signInRequired(applicationContext)
-            // Keep the chain alive. 15 minutes is short enough to recover from transient API/network errors.
             PollScheduler.schedule(applicationContext, Instant.now().plusSeconds(15 * 60))
             return Result.success()
         } catch (e: Exception) {

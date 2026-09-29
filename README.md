@@ -28,10 +28,13 @@ Android only. This is a sideloaded APK. On first install, Android may ask you to
 - Adaptive polling anchored to the controller's actual measurement timestamp.
 - Encrypted AquaWiz credentials/token storage using Android Keystore.
 - Automatic re-login when the AquaWiz token expires.
-- Persistent, auto-scrolling activity/diagnostic log in the app.
+- Three-section app UI: **Status**, **History**, and **Config**.
+- Persistent, auto-scrolling activity/diagnostic log in the Status tab.
+- Local measurement History stores every retrieved measurement and all available values regardless of notification-display settings.
 - Global and China AquaWiz server support.
 - GitHub Releases update checker with an Android notification when a newer app version is available.
 - Manual **Check for updates** button.
+- Test notification uses the most recent real stored measurement when available; before the first real reading it uses one of several normal sample measurements.
 - GitHub and Reef2Reef links directly in the app.
 - Measurement notifications open the installed official AquaWiz app when tapped; if AquaWiz is not installed, AquaWiz Notifier opens instead.
 - Custom white/blue AquaWiz Notifier launcher icon for the public build.
@@ -119,6 +122,20 @@ For KH-series graph rows, the official app transforms these raw fields:
 
 See [docs/API_REVERSE_ENGINEERING.md](docs/API_REVERSE_ENGINEERING.md) for the detailed reverse-engineering notes.
 
+## App sections
+
+### Status
+
+Shows live monitoring state, current version/update state, latest stored measurement, polling schedule, errors, and the rolling activity log. The live status console auto-scrolls to the newest entry.
+
+### History
+
+Stores measurements locally in newest-first order. History is independent of notification configuration: dKH, pH, pH(O), ΔpH, Dose, device serial, and measurement timestamp are retained whenever those values are available from AquaWiz. The initial baseline reading is stored in History even though it intentionally does not produce a notification.
+
+### Config
+
+Contains AquaWiz login/server/device settings, measurement interval, notification-detail toggles, test notification, update check, and sign-out controls. When required setup is missing, the app opens directly to Config; otherwise it opens to Status.
+
 ## Setup
 
 1. Install the APK on Android.
@@ -131,11 +148,11 @@ See [docs/API_REVERSE_ENGINEERING.md](docs/API_REVERSE_ENGINEERING.md) for the d
 8. Tap **Test notification**.
 9. Tap **Sign in & start**.
 
-The first successfully read measurement becomes the baseline and does **not** create an old/stale notification. The next new measurement does.
+The first successfully read measurement becomes the baseline and does **not** create an old/stale notification. It is still saved to local History. The next new measurement notifies normally.
 
 ## Activity / diagnostics
 
-The bottom of the app contains a fixed-height scrollable activity console. New entries are appended at the bottom and the view automatically scrolls to the newest information.
+The Status tab contains a fixed-height scrollable activity console. New entries are appended at the bottom and the view automatically scrolls to the newest information.
 
 The activity log records events such as:
 
@@ -172,8 +189,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 3
-versionName = "0.3.0"
+versionCode = 4
+versionName = "0.4.0"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -185,7 +202,7 @@ The tagged-release workflow expects these GitHub Actions secrets:
 - `AQUAWIZ_KEY_ALIAS`
 - `AQUAWIZ_KEY_PASSWORD`
 
-A tag such as `v0.3.0` builds a signed release APK and publishes two release assets: `AquaWizNotifier.apk` for the permanent latest-download link and `AquaWizNotifier-v0.3.0.apk` for versioned archives.
+A tag such as `v0.4.0` builds a signed release APK and publishes two release assets: `AquaWizNotifier.apk` for the permanent latest-download link and `AquaWizNotifier-v0.4.0.apk` for versioned archives.
 
 Do not lose the release keystore. If it is lost, existing users cannot install future APKs as normal upgrades.
 

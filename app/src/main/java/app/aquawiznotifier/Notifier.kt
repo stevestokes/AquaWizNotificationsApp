@@ -113,7 +113,20 @@ object Notifier {
     }
 
     fun test(context: Context) {
-        measurement(context, "KH1-00-05117", Measurement(8.42, java.time.Instant.now(), rawId = "test", ph = 8.27, phOpenAir = 8.35, deltaPh = -0.08, doseMl = 1.20), 8.35)
+        val store = SecureStore(context)
+        val stored = store.lastStoredMeasurement()
+        if (stored != null) {
+            val (serial, m) = stored
+            measurement(context, serial, m.copy(measuredAt = java.time.Instant.now(), rawId = "test"), store.lastKh())
+            return
+        }
+
+        val samples = listOf(
+            Measurement(8.12, java.time.Instant.now(), rawId = "test", ph = 8.21, phOpenAir = 8.31, deltaPh = -0.10, doseMl = 1.20),
+            Measurement(8.24, java.time.Instant.now(), rawId = "test", ph = 8.17, phOpenAir = 8.28, deltaPh = -0.11, doseMl = 1.35),
+            Measurement(8.05, java.time.Instant.now(), rawId = "test", ph = 8.26, phOpenAir = 8.34, deltaPh = -0.08, doseMl = 1.10),
+        )
+        measurement(context, "KH1-00-00000", samples.random(), null)
     }
 
 
