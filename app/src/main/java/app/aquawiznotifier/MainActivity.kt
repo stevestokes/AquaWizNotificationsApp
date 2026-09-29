@@ -215,7 +215,7 @@ class MainActivity : Activity() {
                 store.clearSession()
                 store.clearMonitoringState()
                 toast("Stopped")
-                tabs.currentTabTag = "config"
+                tabs.setCurrentTabByTag("config")
                 updateStatus()
             }
         }
@@ -261,7 +261,7 @@ class MainActivity : Activity() {
         val typedSerial = serial.text.toString().trim()
         if (u.isBlank() || p.isBlank()) {
             toast("Enter username and password")
-            tabs.currentTabTag = "config"
+            tabs.setCurrentTabByTag("config")
             return
         }
         saveConfig()
@@ -307,14 +307,14 @@ class MainActivity : Activity() {
                         if (chosenSerial.isBlank()) "Signed in. Enter your device serial."
                         else "Signed in. Monitoring started."
                     )
-                    if (chosenSerial.isNotBlank()) tabs.currentTabTag = "status"
+                    if (chosenSerial.isNotBlank()) tabs.setCurrentTabByTag("status")
                     updateStatus()
                     updateHistory()
                 }
             } catch (e: Exception) {
                 store.appendActivity("Sign-in failed: " + (e.message ?: e.javaClass.simpleName))
                 runOnUiThread {
-                    tabs.currentTabTag = "config"
+                    tabs.setCurrentTabByTag("config")
                     updateStatus()
                 }
             }
