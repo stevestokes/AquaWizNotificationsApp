@@ -96,4 +96,18 @@ class SecureStore(context: Context) {
     fun setMeasurementIntervalMinutes(v: Long) = prefs.edit().putLong("measurement_interval", v.coerceIn(15L, 24L * 60L)).apply()
     fun baseUrl(): String = prefs.getString("base_url", AquaWizApi.GLOBAL_BASE) ?: AquaWizApi.GLOBAL_BASE
     fun setBaseUrl(v: String) = prefs.edit().putString("base_url", v.trimEnd('/')).apply()
+
+    fun lastUpdateCheckEpochMs(): Long? = if (prefs.contains("last_update_check_ms")) prefs.getLong("last_update_check_ms", 0L) else null
+    fun setLastUpdateCheckEpochMs(v: Long) = prefs.edit().putLong("last_update_check_ms", v).apply()
+    fun latestReleaseVersion(): String? = prefs.getString("latest_release_version", null)
+    fun setLatestReleaseVersion(v: String) = prefs.edit().putString("latest_release_version", v).apply()
+    fun latestReleaseUrl(): String? = prefs.getString("latest_release_url", null)
+    fun setLatestReleaseUrl(v: String) = prefs.edit().putString("latest_release_url", v).apply()
+    fun lastUpdateNotifiedVersion(): String? = prefs.getString("last_update_notified_version", null)
+    fun setLastUpdateNotifiedVersion(v: String) = prefs.edit().putString("last_update_notified_version", v).apply()
+    fun lastUpdateError(): String? = prefs.getString("last_update_error", null)
+    fun setLastUpdateError(v: String?) = prefs.edit().apply {
+        if (v.isNullOrBlank()) remove("last_update_error") else putString("last_update_error", v.take(500))
+    }.apply()
+
 }
