@@ -16,12 +16,22 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
     companion object {
         const val GLOBAL_BASE = "https://server.aquawiz.net"
         const val CHINA_BASE = "https://server.aquawiz.cn"
+
+        internal fun buildLoginBody(username: String, password: String): String =
+            JSONObject()
+                .put("user", username)
+                .put("password", password)
+                .put("token", JSONObject().put("access_token", ""))
+                .toString()
     }
 
     class ApiException(val status: Int, message: String) : Exception(message)
 
     fun login(username: String, password: String): Session {
-        val body = JSONObject().put("username", username).put("password", password).toString()
+        // Exact auth payload used by the official AquaWiz Android app (recovered from Hermes bytecode).
+        // AquaWiz expects the account identifier under "user", not "username", and includes an
+        // initially-empty token object even for the credential exchange.
+        val body = buildLoginBody(username, password)
         val response = request("POST", "$baseUrl/api/v1/KH/auth", body = body)
         val root = JSONObject(response)
         val token = firstString(root, listOf("access_token", "accessToken"))
