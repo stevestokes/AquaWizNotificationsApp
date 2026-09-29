@@ -19,9 +19,10 @@ Android only. This is a sideloaded APK. On first install, Android may ask you to
 ## Features
 
 - Android notification for every newly detected AquaWiz measurement.
-- Notification title includes controller ID, dKH, and pH:
-  - `[KH1-00-05117] 8.42 dKH, 8.27 pH`
-- Optional second notification line:
+- Alkatronic-style measurement notification:
+  - `[KH1-00-05117] New measurement result:`
+  - `8.42 dKH, 8.27 pH`
+- Optional expanded detail line:
   - `pH(O) 8.35 • ΔpH -0.08 • Dose 1.20 mL`
 - Individual on/off controls for pH(O), ΔpH, and Dose.
 - Adaptive polling anchored to the controller's actual measurement timestamp.
@@ -32,10 +33,8 @@ Android only. This is a sideloaded APK. On first install, Android may ask you to
 - GitHub Releases update checker with an Android notification when a newer app version is available.
 - Manual **Check for updates** button.
 - GitHub and Reef2Reef links directly in the app.
-
-## Why native Kotlin instead of Flutter?
-
-This project is Android-only and most of its important behavior is Android-specific: WorkManager scheduling, notifications, secure credential storage, and sideloaded APK updates. Native Kotlin keeps the project small, dependency-light, and easier to audit.
+- Measurement notifications open the installed official AquaWiz app when tapped; if AquaWiz is not installed, AquaWiz Notifier opens instead.
+- Custom white/blue AquaWiz Notifier launcher icon for the public build.
 
 ## Measurement timing
 
@@ -173,8 +172,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 2
-versionName = "0.2.0"
+versionCode = 3
+versionName = "0.3.0"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -186,7 +185,7 @@ The tagged-release workflow expects these GitHub Actions secrets:
 - `AQUAWIZ_KEY_ALIAS`
 - `AQUAWIZ_KEY_PASSWORD`
 
-A tag such as `v0.2.0` builds a signed release APK and publishes two release assets: `AquaWizNotifier.apk` for the permanent latest-download link and `AquaWizNotifier-v0.2.0.apk` for versioned archives.
+A tag such as `v0.3.0` builds a signed release APK and publishes two release assets: `AquaWizNotifier.apk` for the permanent latest-download link and `AquaWizNotifier-v0.3.0.apk` for versioned archives.
 
 Do not lose the release keystore. If it is lost, existing users cannot install future APKs as normal upgrades.
 

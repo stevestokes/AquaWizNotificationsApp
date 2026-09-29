@@ -29,6 +29,10 @@ The GitHub request contains no AquaWiz username, password, token, or controller 
 
 Tapping a project/update link may open the user's browser to GitHub or Reef2Reef.
 
+## Measurement notification launch behavior
+
+When a measurement notification is tapped, the app queries installed launcher activities and opens the installed app whose visible label matches `AquaWiz`. AquaWiz Notifier excludes its own package and falls back to AquaWiz Notifier if no official AquaWiz launcher activity is found. No AquaWiz credentials are shared through this launch intent.
+
 ## Activity log
 
 The local activity log is intended for troubleshooting app behavior.

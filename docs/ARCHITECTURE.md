@@ -90,7 +90,8 @@ Every subsequently detected measurement with a different fingerprint generates o
 The notification layout is:
 
 ```text
-[KH1-00-05117] 8.42 dKH, 8.27 pH
+[KH1-00-05117] New measurement result:
+8.42 dKH, 8.27 pH
 pH(O) 8.35 • ΔpH -0.08 • Dose 1.20 mL
 Measured 1:04 PM • ↑ 0.06 dKH
 ```
@@ -102,6 +103,8 @@ The optional second-line fields are individually configurable:
 - Dose (mL)
 
 If a selected optional value is unavailable from AquaWiz, it is omitted rather than replaced with a guessed value.
+
+Tapping a measurement notification attempts to open the installed official AquaWiz app. The notifier discovers an installed launcher activity whose visible label is `AquaWiz`, excludes its own package, and falls back to AquaWiz Notifier if the official app cannot be found.
 
 ## Deduplication
 
@@ -127,7 +130,7 @@ Events include:
 - update checks
 - available versions
 
-`MainActivity` displays this data in a fixed-height nested ScrollView and automatically scrolls to the bottom after refresh so the newest event remains visible.
+`MainActivity` displays this data in a fixed-height independently scrollable text console and automatically scrolls to the bottom after refresh so the newest event remains visible.
 
 ## Components
 
@@ -233,3 +236,8 @@ Network destinations are limited to:
 - the selected AquaWiz HTTPS API host
 - the public GitHub Releases API for update metadata
 - the user's browser when opening project/release links
+
+
+## Launcher icon
+
+The public build uses the selected white-background blue/cyan droplet-and-alert icon. Android adaptive and legacy launcher resources both point to the selected artwork for visual consistency across launchers.

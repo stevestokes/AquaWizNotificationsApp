@@ -62,11 +62,14 @@ Important currently validated details include:
 
 ## Notification behavior
 
-The primary notification line should keep the controller serial visible:
+Measurement notifications should preserve the Alkatronic-inspired structure:
 
 ```text
-[DEVICE_SERIAL] n.nn dKH, n.nn pH
+[DEVICE_SERIAL] New measurement result:
+n.nn dKH, n.nn pH
 ```
+
+Tapping a measurement notification should launch the installed official AquaWiz app when available, with AquaWiz Notifier as the fallback.
 
 Optional detail values belong on the second line and must respect the user's saved toggles.
 
@@ -98,8 +101,8 @@ Every release must increment Android `versionCode`.
 Use semantic `versionName` values that match GitHub tags:
 
 ```text
-versionName 0.2.0
-tag         v0.2.0
+versionName 0.3.0
+tag         v0.3.0
 ```
 
 The in-app updater compares the latest GitHub Release tag against `BuildConfig.VERSION_NAME`.

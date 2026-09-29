@@ -213,3 +213,15 @@ https://api.github.com/repos/stevestokes/AquaWizNotificationsApp/releases/latest
 ```
 
 No AquaWiz credentials or access token are sent to GitHub.
+
+
+## Notification integration
+
+AquaWiz Notifier presents new measurements in an Alkatronic-inspired layout:
+
+```text
+[DEVICE_SERIAL] New measurement result:
+n.nn dKH, n.nn pH
+```
+
+Optional expanded values may include pH(O), ΔpH, and Dose (mL). Tapping a measurement notification attempts to launch the installed official AquaWiz app by discovering its launcher activity by visible app label. This behavior is separate from the AquaWiz cloud API and does not alter request payloads.

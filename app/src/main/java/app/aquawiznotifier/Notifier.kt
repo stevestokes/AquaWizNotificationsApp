@@ -39,10 +39,8 @@ object Notifier {
             "$arrow ${"%.2f".format(abs(delta))}"
         }
         val store = SecureStore(context)
-        val title = buildString {
-            append("[")
-            append(serial)
-            append("] ")
+        val title = "[$serial] New measurement result:"
+        val primary = buildString {
             append("%.2f".format(m.kh))
             append(" dKH")
             if (m.ph != null) {
@@ -55,7 +53,7 @@ object Notifier {
         if (store.showPhOpenAir() && m.phOpenAir != null) optional += "pH(O) " + "%.2f".format(m.phOpenAir)
         if (store.showDeltaPh() && m.deltaPh != null) optional += "ΔpH " + "%+.2f".format(m.deltaPh)
         if (store.showDoseMl() && m.doseMl != null) optional += "Dose " + "%.2f".format(m.doseMl) + " mL"
-        val detail = if (optional.isEmpty()) "Measured $time" else optional.joinToString(" • ")
+        val expanded = if (optional.isEmpty()) primary else primary + "\n" + optional.joinToString(" • ")
         val subText = buildString {
             append("Measured $time")
             if (change != null) append(" • $change dKH")
@@ -69,7 +67,8 @@ object Notifier {
         val n = android.app.Notification.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_aquawiz_notify)
             .setContentTitle(title)
-            .setContentText(detail)
+            .setContentText(primary)
+            .setStyle(android.app.Notification.BigTextStyle().bigText(expanded))
             .setSubText(subText)
             .setContentIntent(pending)
             .setAutoCancel(true)

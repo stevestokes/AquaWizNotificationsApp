@@ -4,7 +4,7 @@ Before publishing a tagged AquaWiz Notifier release:
 
 1. Confirm `versionCode` increased.
 2. Confirm `versionName` matches the intended Git tag.
-   - Example: `versionName = "0.2.0"` -> tag `v0.2.0`.
+   - Example: `versionName = "0.3.0"` -> tag `v0.3.0`.
 3. Run:
    ```bash
    ./scripts/verify.sh
@@ -16,15 +16,17 @@ Before publishing a tagged AquaWiz Notifier release:
 8. Confirm the configured controller serial is correct.
 9. Confirm the current reading becomes a baseline without creating an old/stale notification.
 10. Confirm the next AquaWiz measurement creates exactly one notification.
-11. Verify notification title format:
+11. Verify notification format:
     ```text
-    [DEVICE_SERIAL] n.nn dKH, n.nn pH
+    [DEVICE_SERIAL] New measurement result:
+    n.nn dKH, n.nn pH
     ```
 12. Verify the optional second line when all toggles are enabled:
     ```text
     pH(O) n.nn • ΔpH +/-n.nn • Dose n.nn mL
     ```
 13. Disable each optional field individually and confirm the notification omits it.
+14. Tap a measurement notification and confirm the installed official AquaWiz app opens. If the official app is absent, confirm AquaWiz Notifier opens instead.
 14. Confirm repeated background polls do not duplicate a measurement notification.
 15. Confirm the next-poll schedule re-anchors to the actual AquaWiz measurement timestamp.
 16. Confirm a 401/403 results in one automatic AquaWiz re-login and monitoring continues.
@@ -51,14 +53,14 @@ Before publishing a tagged AquaWiz Notifier release:
 27. Confirm the release keystore is backed up securely outside GitHub.
 28. Push the matching version tag:
     ```bash
-    git tag v0.2.0
-    git push origin v0.2.0
+    git tag v0.3.0
+    git push origin v0.3.0
     ```
 29. Confirm the **Tagged APK Release** workflow succeeds.
 30. Confirm the GitHub Release contains both signed APK assets:
     ```text
     AquaWizNotifier.apk
-    AquaWizNotifier-v0.2.0.apk
+    AquaWizNotifier-v0.3.0.apk
     ```
 31. Confirm the README's permanent latest-download URL works:
     ```text
