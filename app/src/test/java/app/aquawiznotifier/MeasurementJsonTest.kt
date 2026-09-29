@@ -82,11 +82,16 @@ class MeasurementJsonTest {
     }
 
 
-    @Test fun officialGraphRowIncludesScaledPhFromField23() {
+    @Test fun officialGraphRowMapsKhPhOpenAirDeltaAndDose() {
         val raw = """
             {
               "results": [
-                ["2026-09-29T13:04:00Z", {"field22":8420,"field23":827}]
+                ["2026-09-29T13:04:00Z", {
+                  "field22":8420,
+                  "field26":6000,
+                  "field27":8270,
+                  "field28":8350
+                }]
               ]
             }
         """.trimIndent()
@@ -95,6 +100,9 @@ class MeasurementJsonTest {
         assertNotNull(result)
         assertEquals(8.42, result!!.kh, 0.0001)
         assertEquals(8.27, result.ph!!, 0.0001)
+        assertEquals(8.35, result.phOpenAir!!, 0.0001)
+        assertEquals(-0.08, result.deltaPh!!, 0.0001)
+        assertEquals(1.20, result.doseMl!!, 0.0001)
     }
 
     @Test fun allFieldUsesLatestPh1NotLatestPhStatus() {
