@@ -69,11 +69,7 @@ class HomeChartView(context: Context) : View(context) {
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val left = dp(44f); val right = plotRight()
-        val top = dp(24f); val axisBottom = height - dp(42f)
-        val showDelta = ChartSeries.DELTA in visible
-        val showDose = ChartSeries.DOSE in visible
-        val bottom = axisBottom - if (showDose) dp(76f) else 0f
-        val doseTop = bottom + dp(28f)
+        val top = dp(38f); val bottom = height - dp(32f)
         if (right <= left || bottom <= top) return
         val window = if (items.isEmpty()) null else timeWindow()
         val inView = if (window == null) items else items.filterIndexed { index, m ->
@@ -84,14 +80,12 @@ class HomeChartView(context: Context) : View(context) {
                 (index > 0 && time > window.second && items[index - 1].measuredAt.toEpochMilli() <= window.second)
         }
         val primary = ChartBounds.calculate(inView, limits.first, limits.second, visible)
-        val delta = ChartBounds.delta(inView)
-        val dose = ChartBounds.dose(inView)
+        val secondary = ChartBounds.secondary(inView, visible)
         fun mapY(value: Double, bounds: Pair<Double, Double>, from: Float, to: Float) =
             to - (to - from) * ((value - bounds.first) / (bounds.second - bounds.first)).toFloat()
         fun y(value: Double) = mapY(value, primary, top, bottom)
         fun seriesY(series: ChartSeries, value: Double) = when (series) {
-            ChartSeries.DELTA -> mapY(value, delta, top, bottom)
-            ChartSeries.DOSE -> mapY(value, dose, doseTop, axisBottom)
+            ChartSeries.DELTA, ChartSeries.DOSE -> mapY(value, secondary, top, bottom)
             else -> y(value)
         }
         limits.first?.takeIf { it.isFinite() }?.let { low -> limits.second?.takeIf { it.isFinite() && it >= low }?.let { high ->
@@ -107,26 +101,16 @@ class HomeChartView(context: Context) : View(context) {
             canvas.drawLine(left, yy, right, yy, gridPaint)
             canvas.drawText("%.1f".format(value), dp(3f), yy + dp(4f), axisPaint)
         }
-        if (showDelta) {
-            axisPaint.color = ChartSeries.DELTA.color
-            canvas.drawText("ΔpH", right + dp(6f), top - dp(10f), axisPaint)
-            val decimals = if (delta.second - delta.first < 0.1) 3 else 2
-            for (i in 0..5) {
-                val value = delta.first + (delta.second - delta.first) * i / 5
-                val yy = mapY(value, delta, top, bottom)
-                canvas.drawLine(right, yy, right + dp(3f), yy, markerPaint)
-                canvas.drawText(("%." + decimals + "f").format(value), right + dp(6f), yy + dp(4f), axisPaint)
-            }
-        }
-        if (showDose) {
-            axisPaint.color = ChartSeries.DOSE.color
-            canvas.drawText("Dose · mL", left, doseTop - dp(9f), axisPaint)
-            axisPaint.color = Color.GRAY
-            for (value in listOf(0.0, dose.second)) {
-                val yy = seriesY(ChartSeries.DOSE, value)
-                canvas.drawLine(left, yy, right, yy, gridPaint)
-                canvas.drawText("%.1f".format(value), dp(3f), yy + dp(4f), axisPaint)
-            }
+        axisPaint.color = AwUi.INK
+        canvas.drawText("ΔpH", right + dp(6f), dp(13f), axisPaint)
+        canvas.drawText("Dose · mL", right + dp(6f), dp(27f), axisPaint)
+        canvas.drawLine(right, top, right, bottom, markerPaint)
+        val decimals = if (secondary.second - secondary.first < 0.1) 3 else 2
+        for (i in 0..5) {
+            val value = secondary.first + (secondary.second - secondary.first) * i / 5
+            val yy = mapY(value, secondary, top, bottom)
+            canvas.drawLine(right, yy, right + dp(3f), yy, markerPaint)
+            canvas.drawText(("%." + decimals + "f").format(java.util.Locale.US, value), right + dp(6f), yy + dp(4f), axisPaint)
         }
         axisPaint.color = Color.GRAY
         if (items.isEmpty() || visible.isEmpty()) {
@@ -146,8 +130,7 @@ class HomeChartView(context: Context) : View(context) {
                 }
             }
             canvas.save()
-            canvas.clipRect(left - dp(4f), if (series == ChartSeries.DOSE) doseTop - dp(4f) else top - dp(4f),
-                right + dp(4f), if (series == ChartSeries.DOSE) axisBottom + dp(4f) else bottom + dp(4f))
+            canvas.clipRect(left - dp(4f), top - dp(4f), right + dp(4f), bottom + dp(4f))
             val path = Path()
             var continuing = false
             items.forEach { m ->
@@ -166,18 +149,22 @@ class HomeChartView(context: Context) : View(context) {
             canvas.restore()
         }
         selected?.let {
-            canvas.save(); canvas.clipRect(left, top, right, axisBottom)
+            canvas.save(); canvas.clipRect(left, top, right, bottom)
             canvas.drawLine(x(items[it]), top, x(items[it]), bottom, markerPaint)
-            if (showDose) canvas.drawLine(x(items[it]), doseTop, x(items[it]), axisBottom, markerPaint)
             canvas.restore()
         }
         val first = AppDates.format(java.time.Instant.ofEpochMilli(minTime))
         val last = AppDates.format(java.time.Instant.ofEpochMilli(maxTime))
         val fw = axisPaint.measureText(first); val lw = axisPaint.measureText(last)
-        canvas.drawText(first, left, axisBottom + dp(24f), axisPaint)
-        if (fw + lw + dp(10f) < right - left) canvas.drawText(last, right - lw, axisBottom + dp(24f), axisPaint)
+        canvas.drawText(first, left, bottom + dp(24f), axisPaint)
+        if (fw + lw + dp(10f) < right - left) canvas.drawText(last, right - lw, bottom + dp(24f), axisPaint)
     }
-    private fun plotRight() = width - dp(if (ChartSeries.DELTA in visible) 56f else 8f)
+    private fun plotRight(): Float {
+        val bounds = ChartBounds.secondary(items, visible)
+        val labelWidth = listOf("Dose · mL", "%.3f".format(java.util.Locale.US, bounds.first),
+            "%.3f".format(java.util.Locale.US, bounds.second)).maxOf { axisPaint.measureText(it) }
+        return width - maxOf(dp(64f), labelWidth + dp(12f))
+    }
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (items.isEmpty()) return false
         scale.onTouchEvent(event)

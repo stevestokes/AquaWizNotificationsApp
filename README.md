@@ -209,7 +209,7 @@ Every installable release must increment:
 
 ```kotlin
 versionCode = 15
-versionName = "0.8.4"
+versionName = "0.8.5"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.

@@ -1,3 +1,11 @@
+## v0.8.5
+
+- The chart always shows a numbered right axis shared by delta-pH and dose in mL. Bounds include all enabled secondary values and padding; dose now overlays the main plot. KH/pH and target limits retain their separate left axis.
+- pH(O) is blue, delta-pH orange and dose yellow. The graph card clips content to its rounded outline and draws its uniform border over the content.
+- The four small Home cards are 58dp tall instead of 116dp. Compact chart controls and a viewport-sized graph bring the chart to the bottom of Home, with scrolling retained for small screens or enlarged text.
+- Config → App has a locally remembered Show Status tab switch, off by default.
+- Version code 16 supports installation over v0.8.3/v0.8.4 using the same permanent signing key.
+
 ## v0.8.4
 
 - Measurement notifications use bold TextViews in decorated custom collapsed, expanded, and heads-up layouts. This keeps font weight in the actual notification view rather than relying only on spans in Android's standard body template.

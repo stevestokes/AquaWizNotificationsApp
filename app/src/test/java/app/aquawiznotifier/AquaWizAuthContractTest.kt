@@ -66,21 +66,29 @@ class AquaWizAuthContractTest {
     @Test fun deltaUsesItsOwnObservedNegativeAndPositiveBounds() {
         val readings = listOf(Measurement(7.5, Instant.EPOCH, deltaPh = -0.3, doseMl = 500.0),
             Measurement(8.5, Instant.EPOCH, deltaPh = 0.1))
-        val bounds = ChartBounds.delta(readings)
+        val bounds = ChartBounds.secondary(readings, setOf(ChartSeries.DELTA))
         assertEquals(-0.34, bounds.first, 0.00001)
         assertEquals(0.14, bounds.second, 0.00001)
     }
     @Test fun zeroAndMissingSecondaryValuesHaveUsableBounds() {
         val zero = listOf(Measurement(7.5, Instant.EPOCH, deltaPh = 0.0, doseMl = 0.0))
-        assertEquals(-0.02 to 0.02, ChartBounds.delta(zero))
-        assertTrue(ChartBounds.dose(zero).first < 0.0)
-        assertTrue(ChartBounds.dose(zero).second > 0.0)
-        assertEquals(-0.2 to 0.2, ChartBounds.delta(emptyList()))
-        assertEquals(-0.2 to 0.2, ChartBounds.delta(listOf(Measurement(7.5, Instant.EPOCH, deltaPh = Double.NaN))))
+        assertEquals(-0.02 to 0.02, ChartBounds.secondary(zero, setOf(ChartSeries.DELTA)))
+        assertTrue(ChartBounds.secondary(zero, setOf(ChartSeries.DOSE)).first < 0.0)
+        assertTrue(ChartBounds.secondary(zero, setOf(ChartSeries.DOSE)).second > 0.0)
+        assertEquals(-0.2 to 0.2, ChartBounds.secondary(emptyList(), emptySet()))
+        assertEquals(-0.2 to 0.2, ChartBounds.secondary(listOf(Measurement(7.5, Instant.EPOCH, deltaPh = Double.NaN, doseMl = Double.POSITIVE_INFINITY)), emptySet()))
     }
     @Test fun doseBoundsDoNotDependOnKhOrDelta() {
         val readings = listOf(Measurement(90.0, Instant.EPOCH, deltaPh = -10.0, doseMl = 2.0))
-        assertEquals(-0.2 to 2.2, ChartBounds.dose(readings))
+        assertEquals(-0.2 to 2.2, ChartBounds.secondary(readings, setOf(ChartSeries.DOSE)))
+    }
+    @Test fun deltaAndDoseShareBoundsContainingBothSeries() {
+        val readings = listOf(Measurement(7.5, Instant.EPOCH, deltaPh = -0.3, doseMl = 2.0),
+            Measurement(8.0, Instant.EPOCH, deltaPh = 0.1, doseMl = 0.0))
+        val bounds = ChartBounds.secondary(readings, setOf(ChartSeries.DELTA, ChartSeries.DOSE))
+        assertEquals(-0.53, bounds.first, 0.00001)
+        assertEquals(2.23, bounds.second, 0.00001)
+        assertEquals(bounds, ChartBounds.secondary(readings, emptySet()))
     }
     @Test fun ignoresNonFiniteDataWhenScaling() {
         val readings = listOf(Measurement(Double.NaN, Instant.EPOCH), Measurement(8.0, Instant.EPOCH, ph = Double.POSITIVE_INFINITY))

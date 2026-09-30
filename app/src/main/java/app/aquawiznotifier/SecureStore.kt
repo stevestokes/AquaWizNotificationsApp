@@ -117,6 +117,8 @@ class SecureStore(context: Context) {
     fun setChartLineStyle(series: ChartSeries, style: ChartLineStyle) = prefs.edit().putString("chart_style_" + series.name, style.name).apply()
     fun chartRange(): String = prefs.getString("chart_range", "DAY") ?: "DAY"
     fun setChartRange(range: String) = prefs.edit().putString("chart_range", range).apply()
+    fun showStatusTab(): Boolean = prefs.getBoolean("show_status_tab", false)
+    fun setShowStatusTab(visible: Boolean) = prefs.edit().putBoolean("show_status_tab", visible).apply()
 
     fun saveDeviceSummary(serial: String, summary: DeviceSummary) {
         val json = JSONObject().put("field8", summary.khTarget?.times(1000))

@@ -119,6 +119,7 @@ class MainActivity : Activity() {
 
         homeTabButton = tabButton("Home") { showSection("home") }
         statusTabButton = tabButton("Status") { showSection("status") }
+        statusTabButton.visibility = if (store.showStatusTab()) View.VISIBLE else View.GONE
         historyTabButton = tabButton("History") { showSection("history") }
         configTabButton = tabButton("Config") { showSection("config") }
 
@@ -281,6 +282,16 @@ class MainActivity : Activity() {
 
         val actions = sectionCard("App")
         actions.addView(AwUi.label(this, "Version " + BuildConfig.VERSION_NAME, 12f), full())
+        actions.addView(Switch(this).apply {
+            text = "Show Status tab"; textSize = 14f; typeface = resources.getFont(R.font.aw_regular)
+            setTextColor(AwUi.INK); setPadding(0, dp(8), 0, dp(8))
+            isChecked = store.showStatusTab()
+            setOnCheckedChangeListener { _, checked ->
+                store.setShowStatusTab(checked)
+                statusTabButton.visibility = if (checked) View.VISIBLE else View.GONE
+                if (!checked && currentSection == "status") showSection("config")
+            }
+        }, full())
         actions.addView(AwUi.button(this, "Check for updates").apply {
             setOnClickListener { store.appendActivity("Manual update check queued"); UpdateChecker.checkNow(this@MainActivity); toast("Update check queued"); updateStatus() }
         }, full())

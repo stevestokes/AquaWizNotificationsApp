@@ -3,9 +3,9 @@ package app.aquawiznotifier
 enum class ChartSeries(val label: String, val color: Int, val defaultVisible: Boolean) {
     KH("KH", 0xFF5B34FF.toInt(), true),
     PH("pH", 0xFF3BBF5B.toInt(), true),
-    PH_OPEN_AIR("pH(O)", 0xFF1D9945.toInt(), true),
-    DELTA("ΔpH", 0xFF16AE89.toInt(), false),
-    DOSE("Dose (mL)", 0xFFE6B84C.toInt(), false);
+    PH_OPEN_AIR("pH(O)", 0xFF287DF0.toInt(), true),
+    DELTA("ΔpH", 0xFFF07818.toInt(), false),
+    DOSE("Dose (mL)", 0xFFE5BD00.toInt(), false);
 
     fun value(m: Measurement): Double? = when (this) {
         KH -> m.kh
@@ -33,18 +33,15 @@ object ChartBounds {
         // Each edge receives only 0.2 padding, rather than fixed empty bands.
         return ((values.minOrNull() ?: 7.0) - 0.2) to ((values.maxOrNull() ?: 9.0) + 0.2)
     }
-    fun delta(items: List<Measurement>): Pair<Double, Double> {
-        val values = items.mapNotNull { it.deltaPh }.filter { it.isFinite() }
+    fun secondary(items: List<Measurement>, visible: Set<ChartSeries>): Pair<Double, Double> {
+        val enabled = visible.filter { it == ChartSeries.DELTA || it == ChartSeries.DOSE }
+        // Keep the right scale available even before either secondary line is enabled.
+        val series = enabled.ifEmpty { listOf(ChartSeries.DELTA, ChartSeries.DOSE) }
+        val values = items.flatMap { m -> series.mapNotNull { it.value(m) } }.filter { it.isFinite() }.toMutableList()
         if (values.isEmpty()) return -0.2 to 0.2
+        if (ChartSeries.DOSE in series) values += 0.0
         val low = values.minOrNull()!!; val high = values.maxOrNull()!!
         val padding = maxOf(0.02, (high - low) * 0.1)
-        return (low - padding) to (high + padding)
-    }
-    fun dose(items: List<Measurement>): Pair<Double, Double> {
-        val values = items.mapNotNull { it.doseMl }.filter { it.isFinite() }
-        val low = minOf(0.0, values.minOrNull() ?: 0.0)
-        val high = maxOf(0.1, values.maxOrNull() ?: 0.1)
-        val padding = (high - low) * 0.1
         return (low - padding) to (high + padding)
     }
 
