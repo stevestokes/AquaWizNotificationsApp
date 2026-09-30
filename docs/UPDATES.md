@@ -1,3 +1,32 @@
+## v0.8.6
+
+- Current and server graph copies of a test merge by controller and displayed minute. Server values take priority, missing fields are filled, and existing saved duplicates are repaired automatically. Home combines cached/server readings through the same merge, removing duplicate-driven gaps.
+- Background checks enrich readings from the graph when extra values are missing. Notifications show only configured fields and use the same minute-level event identity; they never create History entries.
+- 3D/1W/1M/1Y curves are smoothly joined without data-point dots. 1D retains dots. Cubic controls stay within adjacent values to avoid inventing extrema; genuinely missing values still break the line.
+- Home cards use a solid 1dp border without elevation shadows. Graph clipping and the border are drawn against the same card bounds, including the bottom corners. Gear controls are replaced by exit icons that still open the official app.
+- Version code 17 and the unchanged permanent release key support updating v0.8.3–v0.8.5 installations.
+
+## v0.8.5
+
+- The chart always shows a numbered right axis shared by delta-pH and dose in mL. Bounds include all enabled secondary values and padding; dose now overlays the main plot. KH/pH and target limits retain their separate left axis.
+- pH(O) is blue, delta-pH orange and dose yellow. The graph card clips content to its rounded outline and draws its uniform border over the content.
+- The four small Home cards are 58dp tall instead of 116dp. Compact chart controls and a viewport-sized graph bring the chart to the bottom of Home, with scrolling retained for small screens or enlarged text.
+- Config → App has a locally remembered Show Status tab switch, off by default.
+- Version code 16 supports installation over v0.8.3/v0.8.4 using the same permanent signing key.
+
+## v0.8.4
+
+- Measurement notifications use bold TextViews in decorated custom collapsed, expanded, and heads-up layouts. This keeps font weight in the actual notification view rather than relying only on spans in Android's standard body template.
+- The collapsed message remains one line; expansion shows all selected values in the same inline text block. Android still provides the app/icon/time header. Notification stacking and actions are unchanged.
+- Version code 15 and the same permanent release key allow installation over v0.8.3.
+
+## v0.8.3
+
+- CI downloads are signed release APKs using the permanent repository signing key. Missing signing secrets fail the build instead of distributing a new runner's debug signature. Version code 14 supports upgrades from earlier versions signed with that same key. Existing debug installations need one transition reinstall because their private keys were not retained.
+- Hero and History borders follow parallel inset corner radii. pH title and value move right 12dp, with the health pill untouched. Calibrate and its gear open the official AW app.
+- History omits per-row device IDs while retaining all measurement values.
+- KH/pH use the left scale with target limits and 0.2 padding; ΔpH uses independent observed bounds on the right. Dose uses its own small mL plot sharing the time axis, cursor, zoom and saved line style. Secondary values never distort the KH scale.
+
 # App updates and GitHub Releases
 
 AquaWiz Notifier is distributed outside the Play Store, so application updates are discovered through GitHub Releases.
@@ -214,3 +243,37 @@ Real-device testing confirmed that the official AquaWiz app can remain logged in
 ## 0.7.0 Home dashboard
 
 Version `0.7.0` adds Phase 1 of the AquaWiz-style Home screen: KH/pH summary cards, dosing cards, official AquaWiz app shortcut, interactive graph inspection, range buttons, graph API backfill, and a single shared Y axis. The initial Y-axis fallback uses observed KH min/max with ±0.5 dKH padding until AquaWiz KH limit settings are mapped.
+
+## 0.8.0 Remaining dashboard phases
+
+- Web Login is the only login method and opens automatically with no saved session. Saved tokens migrate; old passwords are discarded.
+- Official-style diagonal KH/pH hero, rounded cards, official fonts, KH target, probe status, and remaining dosing solution.
+- Verified field8/field15 map target and deviation; chart bounds include ±0.5 dKH padding.
+- Five independent chart lines with locally saved visibility, solid/dashed/dotted styles, and range; drag inspection, pinch zoom, reset gesture.
+- Range caching, loading/error/empty states, and protection against stale requests after account/device changes.
+- Compact recycled History rows with full tap-through detail; timestamp deduplication preserves missing optional fields.
+- All displayed dates use MM/dd/yy @ HH:mm in the device timezone.
+- Corrected dose scaling for small raw graph doses.
+
+Validation: unit tests cover settings isolation/scaling, chart bounds, current and graph measurement scaling, history merging, and date formatting. Live login, notification delivery, and pixel-level Home parity still require a physical Android device.
+
+## 0.8.1 Layout and adaptive chart update
+
+- Shared title/value/footer heights align the diagonal hero; numeric values and units share baselines.
+- All Home cards use a uniform darker 2dp border; rounded range selectors show an explicit selected state.
+- Y bounds include the target limits and all enabled line values, with 0.2 padding per edge. Zoom recalculates bounds for visible data and adjoining segments. Hidden lines do not add empty space.
+- All dates display MM/dd/yy @ hh:mm AM/PM, including previous activity entries.
+- History displays every measurement value inline with alternating row colors; the tap-through prompt/dialog is removed.
+- Config separates connection status, notification details, and app actions. Connection editors are collapsed by default.
+- Tab order: Home, History, Status, Config.
+
+Validation: bounds tests cover below/above-target readings, enabled versus hidden lines, nonfinite values, and 0.2 padding; date tests cover midnight/noon/afternoon and old log timestamps.
+
+## 0.8.2 Screenshot follow-up
+
+- One bold notification text block follows the Alkatronic wording, with selected optional values appended inline and natural wrapping on narrow screens.
+- Removed the manual measured-date header. Android's timestamp reflects posting time.
+- Notification identity is controller plus measurement timestamp; new readings retain prior individual notifications, while retries of the same reading update it without alerting twice. Test notifications receive distinct timestamps.
+- Home unit labels are positioned next to their numbers on the same baseline, replacing the stretched spacing visible in the supplied screenshot.
+
+Validation covers notification wording, absent dates/newlines, missing optional values, toggle behavior, distinct readings/controllers, repeated test notifications, and stable identity across payload changes.

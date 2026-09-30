@@ -32,10 +32,7 @@ class MainActivity : Activity() {
     private lateinit var configTabButton: Button
     private var currentSection = "config"
 
-    private lateinit var authMode: Spinner
     private lateinit var username: EditText
-    private lateinit var password: EditText
-    private lateinit var accessToken: EditText
     private lateinit var connectButton: Button
     private lateinit var serial: EditText
     private lateinit var interval: EditText
@@ -45,16 +42,21 @@ class MainActivity : Activity() {
     private lateinit var doseCheck: CheckBox
 
     private lateinit var status: TextView
-    private lateinit var historyContainer: LinearLayout
+    private lateinit var historyList: ListView
+    private lateinit var historySummary: TextView
+    private lateinit var connectionState: TextView
+    private lateinit var connectionDetails: TextView
+    private lateinit var historyAdapter: HistoryAdapter
+    private var connecting = false
+    private var webLoginOpen = false
 
-    private val statusFmt = DateTimeFormatter.ofPattern("MMM d, h:mm a").withZone(ZoneId.systemDefault())
-    private val historyFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault())
+    private val statusFmt get() = AppDates.formatter
 
     private val uiHandler = Handler(Looper.getMainLooper())
     private val refreshRunnable = object : Runnable {
         override fun run() {
             if (::status.isInitialized) updateStatus()
-            if (::historyContainer.isInitialized && currentSection == "history") updateHistory()
+            if (::historyList.isInitialized && currentSection == "history") updateHistory()
             if (::homeSection.isInitialized && currentSection == "home") homeSection.refreshFromLocal()
             uiHandler.postDelayed(this, 3000L)
         }
@@ -63,18 +65,20 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = SecureStore(this)
+        store.migrateWebLogin()
         Notifier.ensureChannel(this)
         requestNotifications()
         setContentView(buildUi())
         populate()
         selectInitialSection()
+        if ((store.session()?.accessToken.isNullOrBlank() || store.authPaused()) && savedInstanceState == null) rootLogin()
         UpdateChecker.schedule(this)
     }
 
     override fun onResume() {
         super.onResume()
         if (::status.isInitialized) updateStatus()
-        if (::historyContainer.isInitialized) updateHistory()
+        if (::historyList.isInitialized) updateHistory()
         if (::homeSection.isInitialized) homeSection.refreshFromLocal()
         uiHandler.removeCallbacks(refreshRunnable)
         uiHandler.postDelayed(refreshRunnable, 3000L)
@@ -88,6 +92,13 @@ class MainActivity : Activity() {
     private fun buildUi(): View {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            setOnApplyWindowInsetsListener { view, insets ->
+                val bars = if (Build.VERSION.SDK_INT >= 30) insets.getInsets(WindowInsets.Type.systemBars()) else null
+                @Suppress("DEPRECATION")
+                view.setPadding(bars?.left ?: insets.systemWindowInsetLeft, 0,
+                    bars?.right ?: insets.systemWindowInsetRight, bars?.bottom ?: insets.systemWindowInsetBottom)
+                insets
+            }
         }
 
         val tabBar = LinearLayout(this).apply {
@@ -108,13 +119,14 @@ class MainActivity : Activity() {
 
         homeTabButton = tabButton("Home") { showSection("home") }
         statusTabButton = tabButton("Status") { showSection("status") }
+        statusTabButton.visibility = if (store.showStatusTab()) View.VISIBLE else View.GONE
         historyTabButton = tabButton("History") { showSection("history") }
         configTabButton = tabButton("Config") { showSection("config") }
 
-        tabBar.addView(homeTabButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        tabBar.addView(statusTabButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        tabBar.addView(historyTabButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        tabBar.addView(configTabButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        tabBar.addView(homeTabButton, tabLayout())
+        tabBar.addView(historyTabButton, tabLayout())
+        tabBar.addView(statusTabButton, tabLayout())
+        tabBar.addView(configTabButton, tabLayout())
         root.addView(tabBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         val content = FrameLayout(this)
@@ -132,8 +144,10 @@ class MainActivity : Activity() {
         return root
     }
 
-    private fun tabButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label
+    private fun tabLayout() = LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(dp(2), 0, dp(2), 0) }
+
+    private fun tabButton(label: String, action: () -> Unit) = AwUi.button(this, label).apply {
+        textSize = 12f; setPadding(0, 0, 0, 0)
         setOnClickListener { action() }
     }
 
@@ -149,6 +163,9 @@ class MainActivity : Activity() {
         historyTabButton.isEnabled = section != "history"
         configTabButton.isEnabled = section != "config"
 
+        listOf(homeTabButton to "home", historyTabButton to "history", statusTabButton to "status", configTabButton to "config")
+            .forEach { (button, name) -> AwUi.styleButton(button, name == section) }
+        if (section == "config") updateConnectionState()
         if (section == "home") homeSection.onShown()
         if (section == "status") updateStatus()
         if (section == "history") updateHistory()
@@ -193,142 +210,127 @@ class MainActivity : Activity() {
     }
 
     private fun buildHistorySection(): View {
-        val scroll = ScrollView(this)
-        historyContainer = verticalRoot()
-        scroll.addView(historyContainer)
-        return scroll
+        val root = verticalRoot().apply { setBackgroundColor(0xFFF2F4F7.toInt()) }
+        root.addView(AwUi.label(this, "History", 24f, true), full())
+        historySummary = AwUi.label(this, "", 12f).apply { setTextColor(0xFF65758B.toInt()) }
+        root.addView(historySummary, full().apply { bottomMargin = dp(12) })
+        historyAdapter = HistoryAdapter(this)
+        historyList = ListView(this).apply {
+            adapter = historyAdapter; dividerHeight = 0; selector = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
+            background = AwUi.surface(this@MainActivity, radius = 14, border = false); clipToOutline = true
+        }
+        val empty = AwUi.label(this, "No measurements stored yet.", 15f).apply { setPadding(0, dp(24), 0, 0) }
+        root.addView(empty)
+        historyList.emptyView = empty
+        root.addView(FrameLayout(this).apply {
+            background = AwUi.surface(this@MainActivity, radius = 16)
+            setPadding(dp(2), dp(2), dp(2), dp(2))
+            addView(historyList, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        return root
     }
 
     private fun buildConfigSection(): View {
         val scroll = ScrollView(this)
-        val root = verticalRoot()
+        val root = verticalRoot().apply { setBackgroundColor(0xFFF2F4F7.toInt()) }
         scroll.addView(root)
+        root.addView(AwUi.label(this, "Config", 24f, true), full().apply { bottomMargin = dp(12) })
 
-        root.addView(textView("AquaWiz Notifier", 26f))
-
-        val github = textView("GitHub: https://github.com/stevestokes/AquaWizNotificationsApp", 13f).apply {
-            autoLinkMask = Linkify.WEB_URLS
-            movementMethod = LinkMovementMethod.getInstance()
-            linksClickable = true
-        }
-        root.addView(github)
-
-        val author = textView("Made by Biff0rz • Reef2Reef: https://www.reef2reef.com/members/biff0rz.154703/", 13f).apply {
-            autoLinkMask = Linkify.WEB_URLS
-            movementMethod = LinkMovementMethod.getInstance()
-            linksClickable = true
-        }
-        root.addView(author)
-
-        root.addView(textView("Configuration", 20f))
-        root.addView(textView("AquaWiz account, controller, polling and notification settings.", 14f))
+        val account = sectionCard("AquaWiz connection")
+        connectionState = AwUi.label(this, "", 16f, true)
+        connectionDetails = AwUi.label(this, "", 12f).apply { setTextColor(0xFF65758B.toInt()); setLineSpacing(dp(4).toFloat(), 1f) }
+        account.addView(connectionState, full())
+        account.addView(connectionDetails, full())
+        connectButton = AwUi.button(this, "Open AquaWiz Web Login", true).apply { setOnClickListener { signIn() } }
+        account.addView(connectButton, full())
 
         region = Spinner(this).apply {
-            adapter = ArrayAdapter(
-                this@MainActivity,
-                android.R.layout.simple_spinner_dropdown_item,
-                listOf("Global (server.aquawiz.net)", "China (server.aquawiz.cn)")
-            )
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+                listOf("Global (server.aquawiz.net)", "China (server.aquawiz.cn)"))
         }
-        root.addView(textView("Server"))
-        root.addView(region, full())
-
-        root.addView(textView("Authentication", 15f))
-        authMode = Spinner(this).apply {
-            adapter = ArrayAdapter(
-                this@MainActivity,
-                android.R.layout.simple_spinner_dropdown_item,
-                listOf(
-                    "AquaWiz Web Login (recommended)",
-                    "Existing bearer token",
-                    "AquaWiz username/password (fallback)"
-                )
-            )
-        }
-        root.addView(authMode, full())
-
         username = field("AquaWiz username")
-        password = field("Password", password = true)
-        accessToken = field("Existing AquaWiz access token", password = true)
-        serial = field("Device serial (for example KH1-00-00002)")
-        interval = field("Measurement interval in minutes (default 60)").apply {
-            inputType = InputType.TYPE_CLASS_NUMBER
+        serial = field("Controller serial")
+        interval = field("Measurement interval in minutes").apply { inputType = InputType.TYPE_CLASS_NUMBER }
+        val settings = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; visibility = View.GONE
+            addView(AwUi.label(this@MainActivity, "Server", 12f), full()); addView(region, full())
+            addView(AwUi.label(this@MainActivity, "Account", 12f), full()); addView(username, full())
+            addView(AwUi.label(this@MainActivity, "Controller", 12f), full()); addView(serial, full())
+            addView(AwUi.label(this@MainActivity, "Measurement interval (minutes)", 12f), full()); addView(interval, full())
+            addView(AwUi.button(this@MainActivity, "Save connection settings").apply {
+                setOnClickListener {
+                    saveConfig(); settingsVisible(false); updateConnectionState(); toast("Connection settings saved")
+                }
+            }, full())
         }
+        // Keep connection editors available without crowding everyday configuration.
+        connectionEditors = settings
+        account.addView(AwUi.button(this, "Connection settings").apply {
+            setOnClickListener { settingsVisible(settings.visibility != View.VISIBLE) }
+        }, full())
+        account.addView(settings, full())
+        root.addView(account, full().apply { bottomMargin = dp(12) })
 
-        root.addView(username, full())
-        root.addView(password, full())
-        root.addView(accessToken, full())
-        root.addView(serial, full())
-        root.addView(interval, full())
+        val notifications = sectionCard("Notification details")
+        notifications.addView(AwUi.label(this, "KH and pH are always included. Choose additional values.", 12f), full())
+        phOpenAirCheck = notificationToggle("pH(O) · fully aerated pH") { store.setShowPhOpenAir(it) }
+        deltaPhCheck = notificationToggle("ΔpH · pH difference") { store.setShowDeltaPh(it) }
+        doseCheck = notificationToggle("Dose · mL") { store.setShowDoseMl(it) }
+        notifications.addView(phOpenAirCheck, full()); notifications.addView(deltaPhCheck, full()); notifications.addView(doseCheck, full())
+        notifications.addView(AwUi.button(this, "Test notification").apply { setOnClickListener { Notifier.test(this@MainActivity) } }, full())
+        root.addView(notifications, full().apply { bottomMargin = dp(12) })
 
-        root.addView(textView("Notification details", 15f))
-        phOpenAirCheck = CheckBox(this).apply {
-            text = "Show pH(O)"
-            setOnCheckedChangeListener { _, checked -> store.setShowPhOpenAir(checked) }
-        }
-        deltaPhCheck = CheckBox(this).apply {
-            text = "Show ΔpH"
-            setOnCheckedChangeListener { _, checked -> store.setShowDeltaPh(checked) }
-        }
-        doseCheck = CheckBox(this).apply {
-            text = "Show Dose (mL)"
-            setOnCheckedChangeListener { _, checked -> store.setShowDoseMl(checked) }
-        }
-
-        root.addView(phOpenAirCheck, full())
-        root.addView(deltaPhCheck, full())
-        root.addView(doseCheck, full())
-
-        connectButton = Button(this).apply {
-            text = "Sign in & start"
-            setOnClickListener { signIn() }
-        }
-
-        authMode.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                updateAuthModeUi()
+        val actions = sectionCard("App")
+        actions.addView(AwUi.label(this, "Version " + BuildConfig.VERSION_NAME, 12f), full())
+        actions.addView(Switch(this).apply {
+            text = "Show Status tab"; textSize = 14f; typeface = resources.getFont(R.font.aw_regular)
+            setTextColor(AwUi.INK); setPadding(0, dp(8), 0, dp(8))
+            isChecked = store.showStatusTab()
+            setOnCheckedChangeListener { _, checked ->
+                store.setShowStatusTab(checked)
+                statusTabButton.visibility = if (checked) View.VISIBLE else View.GONE
+                if (!checked && currentSection == "status") showSection("config")
             }
-            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
-        }
-        val test = Button(this).apply {
-            text = "Test notification"
-            setOnClickListener { Notifier.test(this@MainActivity) }
-        }
-        val updates = Button(this).apply {
-            text = "Check for updates"
-            setOnClickListener {
-                store.appendActivity("Manual update check queued")
-                UpdateChecker.checkNow(this@MainActivity)
-                toast("Update check queued")
-                updateStatus()
-            }
-        }
-        val stop = Button(this).apply {
-            text = "Stop & disconnect"
+        }, full())
+        actions.addView(AwUi.button(this, "Check for updates").apply {
+            setOnClickListener { store.appendActivity("Manual update check queued"); UpdateChecker.checkNow(this@MainActivity); toast("Update check queued"); updateStatus() }
+        }, full())
+        actions.addView(AwUi.button(this, "Stop & disconnect").apply {
+            setTextColor(0xFFB64242.toInt())
             setOnClickListener {
                 store.appendActivity("Monitoring stopped and notifier session cleared")
-                PollScheduler.cancel(this@MainActivity)
-                store.clearSession()
-                store.clearMonitoringState()
-                toast("Stopped")
-                showSection("config")
-                updateStatus()
+                PollScheduler.cancel(this@MainActivity); store.clearSession(); store.clearMonitoringState()
+                toast("Stopped"); showSection("config"); updateStatus()
             }
-        }
-
-        root.addView(textView("Recommended: use AquaWiz Web Login. The official AquaWiz page handles your credentials and the notifier captures only the returned bearer token. This avoids notifier-side credential login.", 12f))
-        root.addView(textView("Manual bearer-token entry and username/password remain available as fallback options. Background polling never auto-logs in after a rejected token.", 12f))
-        root.addView(connectButton, full())
-        root.addView(test, full())
-        root.addView(updates, full())
-        root.addView(stop, full())
-        root.addView(
-            textView(
-                "Test notification uses the most recent stored AquaWiz measurement when available. Before the first real reading, it uses a normal sample value.",
-                12f
-            )
-        )
+        }, full())
+        root.addView(actions, full())
+        root.addView(textView("Made by Biff0rz · Reef2Reef: https://www.reef2reef.com/members/biff0rz.154703/", 11f).apply {
+            autoLinkMask = Linkify.WEB_URLS; movementMethod = LinkMovementMethod.getInstance(); linksClickable = true
+        }, full())
+        root.addView(textView("GitHub: https://github.com/stevestokes/AquaWizNotificationsApp", 11f).apply {
+            autoLinkMask = Linkify.WEB_URLS; movementMethod = LinkMovementMethod.getInstance(); linksClickable = true
+        }, full())
         return scroll
+    }
+    private lateinit var connectionEditors: LinearLayout
+    private fun settingsVisible(visible: Boolean) { connectionEditors.visibility = if (visible) View.VISIBLE else View.GONE }
+    private fun sectionCard(title: String) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL; background = AwUi.surface(this@MainActivity)
+        setPadding(dp(16), dp(16), dp(16), dp(16))
+        addView(AwUi.label(this@MainActivity, title, 17f, true), full().apply { topMargin = 0; bottomMargin = dp(6) })
+    }
+    private fun notificationToggle(title: String, changed: (Boolean) -> Unit) = CheckBox(this).apply {
+        text = title; textSize = 14f; typeface = resources.getFont(R.font.aw_regular)
+        setTextColor(AwUi.INK); buttonTintList = android.content.res.ColorStateList.valueOf(AwUi.BLUE)
+        setOnCheckedChangeListener { _, checked -> changed(checked) }
+    }
+    private fun updateConnectionState() {
+        if (!::connectionState.isInitialized) return
+        val session = store.session()
+        connectionState.text = when { store.authPaused() -> "Session expired · reconnect"; session == null -> "Not connected"; else -> "Connected" }
+        connectionState.setTextColor(if (session != null && !store.authPaused()) 0xFF26985A.toInt() else AwUi.INK)
+        connectionDetails.text = listOfNotNull(session?.username, store.selectedDevice(),
+            if (store.baseUrl().contains(".cn")) "China server" else "Global server").joinToString(" · ")
     }
 
     private fun verticalRoot() = LinearLayout(this).apply {
@@ -342,111 +344,77 @@ class MainActivity : Activity() {
         setPadding(0, dp(5), 0, dp(5))
     }
 
-    private fun field(hintText: String, password: Boolean = false): EditText = EditText(this).apply {
+    private fun field(hintText: String): EditText = EditText(this).apply {
         hint = hintText
         setSingleLine(true)
-        if (password) inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         setPadding(dp(12), dp(10), dp(12), dp(10))
     }
 
-    private fun updateAuthModeUi() {
-        if (!::authMode.isInitialized || !::password.isInitialized || !::accessToken.isInitialized) return
-        val mode = authMode.selectedItemPosition
-        password.visibility = if (mode == 2) View.VISIBLE else View.GONE
-        accessToken.visibility = if (mode == 1) View.VISIBLE else View.GONE
-        if (::connectButton.isInitialized) {
-            connectButton.text = when (mode) {
-                0 -> "Open AquaWiz Web Login"
-                1 -> "Validate token & start"
-                else -> "Sign in & start"
-            }
-        }
-    }
-
     private fun selectInitialSection() {
-        val session = store.session()
-        val configured = session != null &&
-            session.username.isNotBlank() &&
-            session.accessToken.isNotBlank() &&
-            !store.selectedDevice().isNullOrBlank() &&
-            (store.authMethod() != 2 || session.password.isNotBlank())
-
-        showSection(if (configured) "home" else "config")
+        val configured = store.session()?.accessToken?.isNotBlank() == true && !store.selectedDevice().isNullOrBlank()
+        showSection(if (configured && !store.authPaused()) "home" else "config")
     }
+
+    private fun rootLogin() { window.decorView.post { signIn() } }
 
     private fun signIn() {
-        val mode = authMode.selectedItemPosition
-        val u = username.text.toString().trim()
-        val p = password.text.toString()
-        val token = accessToken.text.toString().trim()
-        val typedSerial = serial.text.toString().trim()
-
-        if (u.isBlank()) {
-            toast("Enter your AquaWiz username")
-            showSection("config")
-            return
-        }
-        if (typedSerial.isBlank()) {
-            toast("Enter the AquaWiz device serial")
-            showSection("config")
-            return
-        }
-
+        if (connecting || webLoginOpen) return
         saveConfig()
-
-        when (mode) {
-            0 -> {
-                store.appendActivity("Opening official AquaWiz web login to obtain a bearer token")
-                updateStatus()
-                val loginUrl = if (store.baseUrl().contains(".cn")) {
-                    "https://www.aquawiz.net/auth/cn/login"
-                } else {
-                    "https://www.aquawiz.net/auth/en"
+        webLoginOpen = true
+        val loginUrl = if (store.baseUrl().contains(".cn")) "https://www.aquawiz.net/auth/cn/login" else "https://www.aquawiz.net/auth/en"
+        AquaWizWebLogin(this, loginUrl, onDismiss = { webLoginOpen = false }) { token, account, devices ->
+            val u = account?.takeIf { it.isNotBlank() } ?: username.text.toString().trim()
+            val device = serial.text.toString().trim().takeIf { it.isNotBlank() } ?: devices.singleOrNull().orEmpty()
+            if (u.isNotBlank() && device.isNotBlank()) {
+                username.setText(u)
+                serial.setText(device)
+                connectWithBearerToken(u, token, device)
+            } else {
+                val form = verticalRoot()
+                val accountInput = field("AquaWiz username").apply { setText(u) }
+                val deviceInput = field("Device serial").apply { setText(device) }
+                form.addView(accountInput)
+                form.addView(deviceInput)
+                val dialog = android.app.AlertDialog.Builder(this)
+                    .setTitle("Connect your controller")
+                    .setMessage("Web Login succeeded. Enter the account and controller to monitor.")
+                    .setView(form).setNegativeButton("Cancel", null).setPositiveButton("Connect", null).create()
+                dialog.setOnShowListener {
+                    dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                        val user = accountInput.text.toString().trim()
+                        val sn = deviceInput.text.toString().trim()
+                        if (user.isBlank()) accountInput.error = "Enter your username"
+                        else if (sn.isBlank()) deviceInput.error = "Enter the device serial"
+                        else {
+                            username.setText(user)
+                            serial.setText(sn)
+                            dialog.dismiss()
+                            connectWithBearerToken(user, token, sn)
+                        }
+                    }
                 }
-                AquaWizWebLogin(this, loginUrl) { capturedToken ->
-                    accessToken.setText(capturedToken)
-                    store.appendActivity("AquaWiz web login returned a bearer token; validating against controller")
-                    connectWithBearerToken(u, capturedToken, typedSerial, "web")
-                }.show()
+                dialog.show()
             }
-            1 -> {
-                if (token.isBlank()) {
-                    toast("Paste an AquaWiz access token")
-                    return
-                }
-                store.appendActivity("Validating existing AquaWiz bearer token without calling /auth")
-                updateStatus()
-                connectWithBearerToken(u, token, typedSerial, "token")
-            }
-            else -> {
-                if (p.isBlank()) {
-                    toast("Enter username and password")
-                    return
-                }
-                store.appendActivity("Signing in to AquaWiz with username/password")
-                updateStatus()
-                connectWithPassword(u, p, typedSerial)
-            }
-        }
+        }.show()
     }
 
     private fun connectWithBearerToken(
         usernameValue: String,
         tokenValue: String,
         deviceSerial: String,
-        source: String,
     ) {
+        connecting = true
+        connectButton.isEnabled = false
         Thread {
             try {
                 val api = AquaWizApi(store.baseUrl())
                 val session = Session(
                     username = usernameValue,
-                    password = "",
                     accessToken = tokenValue,
                     devices = listOf(deviceSerial),
                 )
-                val baseline = api.latestMeasurement(session, deviceSerial)
-                finishConnection(session, deviceSerial, baseline, authMethod = if (source == "web") 0 else 1)
+                val baseline = api.latestMeasurement(session, deviceSerial) { store.saveDeviceSummary(deviceSerial, it) }
+                finishConnection(session, deviceSerial, baseline)
                 runOnUiThread {
                     toast("AquaWiz token validated. Monitoring started.")
                     showSection("home")
@@ -461,37 +429,10 @@ class MainActivity : Activity() {
                     showSection("config")
                     updateStatus()
                 }
-            }
-        }.start()
-    }
-
-    private fun connectWithPassword(
-        usernameValue: String,
-        passwordValue: String,
-        deviceSerial: String,
-    ) {
-        Thread {
-            try {
-                val api = AquaWizApi(store.baseUrl())
-                val loggedIn = api.login(usernameValue, passwordValue)
-                val session = loggedIn.copy(
-                    devices = if (loggedIn.devices.isEmpty()) listOf(deviceSerial) else loggedIn.devices
-                )
-                val baseline = api.latestMeasurement(session, deviceSerial)
-                finishConnection(session, deviceSerial, baseline, authMethod = 2)
+            } finally {
                 runOnUiThread {
-                    toast("Signed in. Monitoring started.")
-                    showSection("home")
-                    updateStatus()
-                    updateHistory()
-                }
-            } catch (e: Exception) {
-                val message = "Sign-in failed: " + (e.message ?: e.javaClass.simpleName)
-                store.appendActivity(message)
-                runOnUiThread {
-                    toast(message)
-                    showSection("config")
-                    updateStatus()
+                    connecting = false
+                    connectButton.isEnabled = true
                 }
             }
         }.start()
@@ -501,12 +442,11 @@ class MainActivity : Activity() {
         session: Session,
         deviceSerial: String,
         baseline: Measurement,
-        authMethod: Int,
     ) {
         store.clearMonitoringState()
         store.setAuthPaused(false)
-        store.setAuthMethod(authMethod)
-        store.setSharedTokenMode(authMethod != 2)
+        store.setAuthMethod(0)
+        store.setSharedTokenMode(true)
         store.saveSession(session)
         store.setSelectedDevice(deviceSerial)
         store.saveMeasurement(deviceSerial, baseline)
@@ -515,13 +455,7 @@ class MainActivity : Activity() {
         store.setLastKh(baseline.kh)
         store.setLastPollEpochMs(System.currentTimeMillis())
         store.setLastError(null)
-        store.appendActivity(
-            if (authMethod == 2) {
-                "Signed in; monitoring " + deviceSerial
-            } else {
-                "Bearer token validated; monitoring " + deviceSerial + " without a notifier-side AquaWiz login"
-            }
-        )
+        store.appendActivity("Web Login connected; monitoring " + deviceSerial)
 
         PollScheduler.schedule(
             this,
@@ -538,8 +472,8 @@ class MainActivity : Activity() {
             if (region.selectedItemPosition == 1) AquaWizApi.CHINA_BASE
             else AquaWizApi.GLOBAL_BASE
         )
-        store.setAuthMethod(authMode.selectedItemPosition)
-        store.setSharedTokenMode(authMode.selectedItemPosition != 2)
+        store.setAuthMethod(0)
+        store.setSharedTokenMode(true)
         serial.text.toString().trim().takeIf { it.isNotBlank() }?.let(store::setSelectedDevice)
         interval.text.toString().toLongOrNull()?.let(store::setMeasurementIntervalMinutes)
         store.setShowPhOpenAir(phOpenAirCheck.isChecked)
@@ -549,22 +483,19 @@ class MainActivity : Activity() {
 
     private fun populate() {
         val session = store.session()
-        authMode.setSelection(store.authMethod())
         username.setText(session?.username.orEmpty())
-        password.setText(session?.password.orEmpty())
-        accessToken.setText(if (store.authMethod() == 1) session?.accessToken.orEmpty() else "")
         serial.setText(store.selectedDevice() ?: session?.devices?.firstOrNull().orEmpty())
         interval.setText(store.measurementIntervalMinutes().toString())
         region.setSelection(if (store.baseUrl().contains(".cn")) 1 else 0)
         phOpenAirCheck.isChecked = store.showPhOpenAir()
         deltaPhCheck.isChecked = store.showDeltaPh()
         doseCheck.isChecked = store.showDoseMl()
-        updateAuthModeUi()
         updateStatus()
         updateHistory()
     }
 
     private fun updateStatus() {
+        updateConnectionState()
         if (!::status.isInitialized) return
 
         val session = store.session()
@@ -579,9 +510,7 @@ class MainActivity : Activity() {
         lines += when {
             store.authPaused() -> "Status: monitoring paused (AquaWiz session conflict)"
             session == null -> "Status: not connected"
-            store.authMethod() == 0 -> "Status: connected via AquaWiz Web Login as " + session.username
-            store.authMethod() == 1 -> "Status: connected with AquaWiz bearer token as " + session.username
-            else -> "Status: signed in as " + session.username
+            else -> "Status: connected as " + session.username
         }
         store.selectedDevice()?.let { lines += "Device: " + it }
 
@@ -624,60 +553,10 @@ class MainActivity : Activity() {
     }
 
     private fun updateHistory() {
-        if (!::historyContainer.isInitialized) return
-
-        historyContainer.removeAllViews()
-        historyContainer.addView(textView("History", 26f))
-        historyContainer.addView(
-            textView(
-                "Locally stored AquaWiz measurements. Notification display settings do not remove fields from History.",
-                13f
-            )
-        )
-
-        val history = store.measurementHistory()
-        if (history.isEmpty()) {
-            historyContainer.addView(textView("No measurements stored yet.", 15f))
-            return
-        }
-
-        history.forEach { (deviceSerial, measurement) ->
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(0, dp(8), 0, dp(8))
-            }
-
-            val primary = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-            }
-
-            primary.addView(
-                textView(historyFmt.format(measurement.measuredAt), 14f),
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.45f)
-            )
-            primary.addView(
-                textView("%.2f dKH".format(measurement.kh), 14f),
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.9f)
-            )
-            primary.addView(
-                textView(measurement.ph?.let { "pH: %.2f".format(it) } ?: "pH: —", 14f),
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.85f)
-            )
-            row.addView(primary)
-
-            val details = mutableListOf<String>()
-            details += deviceSerial
-            details += measurement.phOpenAir?.let { "pH(O) %.2f".format(it) } ?: "pH(O) —"
-            details += measurement.deltaPh?.let { "ΔpH %+.2f".format(it) } ?: "ΔpH —"
-            details += measurement.doseMl?.let { "Dose %.2f mL".format(it) } ?: "Dose —"
-            row.addView(textView(details.joinToString(" • "), 12f))
-
-            historyContainer.addView(row, full())
-            historyContainer.addView(
-                View(this).apply { setBackgroundColor(0x22000000) },
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1))
-            )
+        if (::historyAdapter.isInitialized) {
+            val readings = store.measurementHistory()
+            historyAdapter.submit(readings)
+            historySummary.text = readings.size.toString() + " readings · Newest first"
         }
     }
 

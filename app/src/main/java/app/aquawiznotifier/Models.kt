@@ -4,7 +4,6 @@ import java.time.Instant
 
 data class Session(
     val username: String,
-    val password: String,
     val accessToken: String,
     val devices: List<String>,
 )

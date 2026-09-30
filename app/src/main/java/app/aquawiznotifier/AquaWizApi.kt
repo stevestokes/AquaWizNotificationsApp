@@ -17,31 +17,9 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
         const val GLOBAL_BASE = "https://server.aquawiz.net"
         const val CHINA_BASE = "https://server.aquawiz.cn"
 
-        internal fun buildLoginBody(username: String, password: String): String =
-            JSONObject()
-                .put("user", username)
-                .put("password", password)
-                .put("token", JSONObject().put("access_token", ""))
-                .toString()
     }
 
     class ApiException(val status: Int, message: String) : Exception(message)
-
-    fun login(username: String, password: String): Session {
-        // Exact auth payload used by the official AquaWiz Android app (recovered from Hermes bytecode).
-        // AquaWiz expects the account identifier under "user", not "username", and includes an
-        // initially-empty token object even for the credential exchange.
-        val body = buildLoginBody(username, password)
-        val response = request("POST", "$baseUrl/api/v1/KH/auth", body = body)
-        val root = JSONObject(response)
-        val token = firstString(root, listOf("access_token", "accessToken"))
-            ?: root.optJSONObject("token")?.let { firstString(it, listOf("access_token", "accessToken")) }
-            ?: (root.opt("token") as? String)?.takeIf { it.isNotBlank() }
-            ?: throw ApiException(200, "AquaWiz login response did not contain an access token")
-        val user = root.optJSONObject("user") ?: root
-        val devices = extractDevices(user.opt("devices")).ifEmpty { extractDevices(root.opt("devices")) }
-        return Session(username.trim(), password, token, devices)
-    }
 
     /**
      * Reads the current AquaWiz value using the two cloud calls recovered from the official APK.
@@ -50,10 +28,11 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
      * values latest_kh/latest_time. The device graph call is retained as a fallback in case the
      * undocumented all_field schema changes.
      */
-    fun latestMeasurement(session: Session, serial: String): Measurement {
+    fun latestMeasurement(session: Session, serial: String, onSummary: ((DeviceSummary) -> Unit)? = null): Measurement {
         val normalizedSerial = serial.trim().uppercase()
         val directFailure: Exception? = try {
             val raw = rawAllFields(session, normalizedSerial)
+            DeviceSummaryJson.parse(raw, normalizedSerial)?.let { onSummary?.invoke(it) }
             MeasurementJson.findLatest(raw, normalizedSerial, requirePreferredSerialWhenAmbiguous = true)?.let { return it }
             ApiException(200, "AquaWiz all_field response did not contain a current KH value for device $normalizedSerial")
         } catch (e: ApiException) {
@@ -260,7 +239,7 @@ object MeasurementJson {
 
     private fun doseFromField26(value: Any?): Double? {
         val raw = asDouble(value) ?: return null
-        val scaled = if (raw > 100.0) raw / 5000.0 else raw
+        val scaled = raw / 5000.0
         return scaled.takeIf { it >= 0.0 }
     }
 
@@ -277,11 +256,11 @@ object MeasurementJson {
     }
 
     private fun parseObject(o: JSONObject): Measurement? {
-        val kh = number(o, khKeys) ?: khFromField22(o.opt("field22")) ?: inferKhFromGraphObject(o) ?: return null
+        val kh = number(o, khKeys)?.let { if (it > 20.0) it / 1000.0 else it } ?: khFromField22(o.opt("field22")) ?: inferKhFromGraphObject(o) ?: return null
         if (kh !in 2.0..20.0) return null
         val whenAt = instant(o, timeKeys) ?: return null
         val id = string(o, idKeys)
-        val ph = number(o, phKeys)?.takeIf { it in 4.0..12.0 } ?: phFromField27(o.opt("field27"))
+        val ph = number(o, phKeys)?.let { if (it > 12.0) it / 1000.0 else it }?.takeIf { it in 4.0..12.0 } ?: phFromField27(o.opt("field27"))
         val phOpenAir = number(o, listOf("phOpenAir", "ph_open_air", "phO", "ph_o"))
             ?.takeIf { it in 4.0..12.0 } ?: phFromField28(o.opt("field28"))
         val deltaPh = number(o, listOf("deltaPh", "delta_ph", "delta"))

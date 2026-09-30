@@ -141,4 +141,21 @@ class MeasurementJsonTest {
         assertEquals(Instant.parse("2026-09-29T15:00:00Z"), result[1].measuredAt)
     }
 
+    @Test fun scalesRawCurrentValuesAndSmallGraphDoses() {
+        val current = MeasurementJson.findLatest("""{"latest_kh":8420,"latest_ph1":8270,"latest_time":"2026-09-29T13:04:00Z"}""")!!
+        assertEquals(8.42, current.kh, 0.00001)
+        assertEquals(8.27, current.ph!!, 0.00001)
+        val rows = MeasurementJson.graphMeasurements("""{"results":[["2026-09-29T13:04:00Z",{"field22":8420,"field26":50}]]}""")
+        assertEquals(0.01, rows.single().doseMl!!, 0.00001)
+    }
+    @Test fun currentAndGraphReadingsMergeWithoutLosingOptionalFields() {
+        val at = Instant.parse("2026-09-29T13:04:00Z")
+        val current = Measurement(8.42, at, ph = 8.27)
+        val graph = Measurement(8.42, at, rawId = "graph:1", ph = 8.27, phOpenAir = 8.35, doseMl = 1.2)
+        val result = HistoryMerge.merge(listOf("KH-A" to current, "kh-a" to graph, "KH-B" to graph))
+        assertEquals(2, result.size)
+        assertEquals(8.35, result.first().second.phOpenAir!!, 0.0001)
+        assertEquals(1.2, result.first().second.doseMl!!, 0.0001)
+    }
+
 }

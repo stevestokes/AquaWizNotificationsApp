@@ -16,9 +16,10 @@ import android.widget.TextView
 class AquaWizWebLogin(
     private val activity: Activity,
     private val loginUrl: String,
-    private val onToken: (String) -> Unit,
+    private val onDismiss: () -> Unit = {},
+    private val onToken: (String, String?, List<String>) -> Unit,
 ) {
-    private var completed = false
+    private val completed = java.util.concurrent.atomic.AtomicBoolean(false)
 
     fun show() {
         val dialog = Dialog(activity)
@@ -45,12 +46,11 @@ class AquaWizWebLogin(
         webView.settings.allowFileAccess = false
         webView.settings.allowContentAccess = false
 
-        val bridge = TokenBridge { token ->
-            if (!completed) {
-                completed = true
+        val bridge = TokenBridge { token, account, devices ->
+            if (completed.compareAndSet(false, true)) {
                 activity.runOnUiThread {
                     dialog.dismiss()
-                    onToken(token)
+                    onToken(token, account, devices)
                 }
             }
         }
@@ -59,7 +59,7 @@ class AquaWizWebLogin(
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView, url: String?) {
                 super.onPageFinished(view, url)
-                injectTokenCapture(view)
+                if (url != null && isAllowedNavigation(Uri.parse(url))) injectTokenCapture(view)
             }
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -83,6 +83,8 @@ class AquaWizWebLogin(
 
         dialog.setContentView(root)
         dialog.setOnDismissListener {
+            completed.set(true)
+            onDismiss()
             webView.removeJavascriptInterface(BRIDGE_NAME)
             webView.stopLoading()
             webView.destroy()
@@ -113,13 +115,20 @@ class AquaWizWebLogin(
         (value * activity.resources.displayMetrics.density).toInt()
 
     private class TokenBridge(
-        private val onToken: (String) -> Unit,
+        private val onToken: (String, String?, List<String>) -> Unit,
     ) {
+        @Volatile private var account: String? = null
+        @Volatile private var devices: List<String> = emptyList()
+        @JavascriptInterface
+        fun captureAccount(user: String?, serials: String?) {
+            account = user?.trim()?.takeIf { it.isNotBlank() && it.length < 200 }
+            devices = serials.orEmpty().split(",").map { it.trim() }.filter { it.startsWith("KH", true) || it.startsWith("CA", true) }
+        }
         @JavascriptInterface
         fun captureToken(token: String?) {
             val normalized = token?.trim().orEmpty()
             if (normalized.length < 20 || normalized.any { it.isWhitespace() }) return
-            onToken(normalized)
+            onToken(normalized, account, devices)
         }
     }
 
@@ -164,7 +173,17 @@ class AquaWizWebLogin(
 
               function report(value) {
                 try {
+                  if (typeof value === 'string') { try { value = JSON.parse(value); } catch (e) {} }
                   var token = findToken(value, 0);
+                  if (value && typeof value === 'object' && window.AquaWizTokenBridge) {
+                    var user = typeof value.user === 'string' ? value.user :
+                      (value.username || (value.user && (value.user.username || value.user.user)));
+                    var devices = value.devices || (value.user && value.user.devices) || [];
+                    var serials = Array.isArray(devices) ? devices.map(function(d) {
+                      return typeof d === 'string' ? d : (d.deviceSerial || d.serial || d.sn || '');
+                    }).join(',') : '';
+                    if (user) window.AquaWizTokenBridge.captureAccount(String(user), serials);
+                  }
                   if (token && window.AquaWizTokenBridge) {
                     window.AquaWizTokenBridge.captureToken(token);
                   }

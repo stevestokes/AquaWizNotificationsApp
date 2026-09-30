@@ -90,13 +90,12 @@ Every subsequently detected measurement with a different fingerprint generates o
 The notification layout is:
 
 ```text
-[KH1-00-05117] New measurement result:
-8.42 dKH, 8.27 pH
-pH(O) 8.35 • ΔpH -0.08 • Dose 1.20 mL
-Measured 1:04 PM • ↑ 0.06 dKH
+[KH1-00-05117] New measurement result: 8.42 dKH, pH 8.27. • pH(O) 8.35 • ΔpH -0.08 • Dose 1.20 mL
 ```
 
-The optional second-line fields are individually configurable:
+Optional inline fields are individually configurable. Android wraps text as needed and displays posting time in its native header. Different controller/timestamp tags retain separate notifications.
+
+Configurable values:
 
 - pH(O)
 - ΔpH
@@ -108,7 +107,7 @@ Tapping a measurement notification attempts to open the installed official AquaW
 
 ## Web Login and bearer-token authentication
 
-The recommended authentication path uses `AquaWizWebLogin`, a WebView pointed at the official AquaWiz web login page. The web page handles credentials; a narrowly scoped JavaScript bridge watches successful fetch/XHR responses and web storage for an AquaWiz `access_token`. The notifier never receives or stores the web password.
+The only authentication path uses `AquaWizWebLogin`, a WebView pointed at the official AquaWiz web login page. The web page handles credentials; a narrowly scoped JavaScript bridge watches successful fetch/XHR responses and web storage for an AquaWiz `access_token`. The notifier never receives or stores the web password.
 
 The official AquaWiz bytecode shows that credential login calls:
 
@@ -119,7 +118,7 @@ POST /api/v1/KH/auth
 
 and later stores the returned `access_token` inside the app's private `user_token` in Expo SecureStore. Normal API requests read `accessToken` from local auth state and send `Authorization: Bearer <accessToken>`.
 
-After capture, the bearer token is validated with `latestMeasurement()`, stored through `SecureStore`, and used for normal polling. Manual bearer-token entry follows the same validation path. Android sandboxing prevents direct reading of the official AquaWiz app's Expo SecureStore, so Web Login provides the practical token handoff without root.
+After capture, the bearer token is validated with `latestMeasurement()`, stored through `SecureStore`, and used for normal polling. Manual bearer-token entry and password login are removed. Startup migrates saved tokens and removes legacy stored passwords. Android sandboxing prevents direct reading of the official AquaWiz app's Expo SecureStore, so Web Login provides the practical token handoff without root.
 
 ## AquaWiz session-conflict handling
 
@@ -168,19 +167,19 @@ The app has four top-level sections:
 - **History**: newest-first local measurement history. Storage is independent of notification display toggles and preserves all available measurement values.
 - **Config**: server/account/device setup, measurement interval, notification detail preferences, test notification, updater controls, and sign-out.
 
-If account/device setup is incomplete, Config is the initial section. Otherwise Home is the initial section.
+No saved session opens Web Login automatically. Valid configured sessions open Home; incomplete setup or paused authentication opens Config.
 
 ## Home chart data flow
 
 Home uses the existing authenticated session and the official graph route with a caller-supplied start timestamp. `AquaWizApi.graphMeasurements()` parses every graph row instead of selecting only the newest one. The result is merged into local History with `SecureStore.saveMeasurements()`.
 
-Range controls request approximately 1 day, 3 days, 1 week, 1 month, or 1 year of history. The Home chart renders KH, pH, and pH(O) on one shared Y axis. Phase 1 scales that axis from observed KH low/high values with 0.5 dKH padding on each side. Explicit KH limits are supported by the chart API but are not populated until the AquaWiz limit-setting fields are mapped.
+Range controls request approximately 1 day, 3 days, 1 week, 1 month, or 1 year of history. KH, pH, pH(O), ΔpH, and Dose can be toggled independently on one shared Y axis. DeviceSummaryJson maps field8/1000 to the target and field15/1000 to the alert deviation; bounds are target ± deviation and join every enabled line value to determine tight Y bounds, with 0.2 padding on each side. Missing limits fall back to visible data. SharedPreferences retain line visibility, line style, and range. Dragging inspects points, pinching zooms time, and double tapping resets. Device summary also maps latest_ph probe state and field14/field16 solution levels.
 
 Opening Home or changing chart ranges never updates `lastFingerprint`, so chart backfill cannot suppress a future measurement notification.
 
 ## Local measurement history
 
-Every newly retrieved AquaWiz measurement is persisted locally, including the initial baseline measurement. Entries are deduplicated by device serial plus measurement fingerprint and retained newest-first. The current implementation keeps up to 2,000 measurements.
+Every newly retrieved AquaWiz measurement is persisted locally, including the initial baseline measurement. Entries are deduplicated by device serial plus measurement timestamp, filling missing optional values when current and graph readings overlap and retained newest-first. The current implementation keeps up to 2,000 measurements.
 
 Stored fields include:
 
@@ -289,7 +288,7 @@ If the signing key changes or is lost, Android will not accept a future APK as a
 
 ## Security
 
-AquaWiz username, password, cloud token, and device list are serialized and encrypted with AES-GCM. The AES key is non-exportable and stored in Android Keystore.
+AquaWiz username, cloud token, and device list are serialized and encrypted with AES-GCM. The AES key is non-exportable and stored in Android Keystore.
 
 Android backup is disabled.
 
@@ -310,3 +309,7 @@ Network destinations are limited to:
 ## Launcher icon
 
 The public build uses the selected white-background blue/cyan droplet-and-alert icon. Android adaptive and legacy launcher resources both point to the selected artwork for visual consistency across launchers.
+
+## Measurement notification presentation (0.8.2)
+
+MeasurementNotification builds a single date-free text block with selected optional values inline. Notifier applies a bold span to both compact and expanded text, using Android posting time in the native header. It posts with notify(controller/timestamp tag, measurement ID, notification), preserving separate readings while making retries idempotent. Each result remains until opened or dismissed, subject to Android notification retention/grouping. Home numeric/unit rows use MeasurementValueView to align unit baselines and keep units directly beside autosized values.

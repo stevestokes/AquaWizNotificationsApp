@@ -23,8 +23,42 @@ jobs:
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
       - name: Test and build
         run: ./scripts/verify.sh
+      # Installable APKs always use the persistent release key; runner debug keys change.
+      - name: Validate signing secrets
+        if: github.event_name == 'push'
+        env:
+          KEYSTORE_B64: ${{ secrets.AQUAWIZ_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.AQUAWIZ_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.AQUAWIZ_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.AQUAWIZ_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_B64" || (echo "Missing AQUAWIZ_KEYSTORE_BASE64" && exit 1)
+          test -n "$KEYSTORE_PASSWORD" || (echo "Missing AQUAWIZ_KEYSTORE_PASSWORD" && exit 1)
+          test -n "$KEY_ALIAS" || (echo "Missing AQUAWIZ_KEY_ALIAS" && exit 1)
+          test -n "$KEY_PASSWORD" || (echo "Missing AQUAWIZ_KEY_PASSWORD" && exit 1)
+      - name: Restore permanent signing key
+        if: github.event_name == 'push'
+        env:
+          KEYSTORE_B64: ${{ secrets.AQUAWIZ_KEYSTORE_BASE64 }}
+        run: |
+          umask 077
+          echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/aquawiz-release.jks"
+      - name: Build and verify signed APK
+        if: github.event_name == 'push'
+        env:
+          AQUAWIZ_KEYSTORE_PATH: ${{ runner.temp }}/aquawiz-release.jks
+          AQUAWIZ_KEYSTORE_PASSWORD: ${{ secrets.AQUAWIZ_KEYSTORE_PASSWORD }}
+          AQUAWIZ_KEY_ALIAS: ${{ secrets.AQUAWIZ_KEY_ALIAS }}
+          AQUAWIZ_KEY_PASSWORD: ${{ secrets.AQUAWIZ_KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push'
         with:
-          name: AquaWizNotifier-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: AquaWizNotifier-signed
+          path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/aquawiz-release.jks"
