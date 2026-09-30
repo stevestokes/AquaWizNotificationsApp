@@ -4,7 +4,8 @@ import java.util.Locale
 
 object MeasurementNotification {
     fun tag(serial: String, measurement: Measurement): String =
-        "measurement:" + serial.trim().uppercase(Locale.ROOT) + ":" + measurement.measuredAt.toEpochMilli()
+        "measurement:" + serial.trim().uppercase(Locale.ROOT) + ":" +
+            (if (measurement.rawId == "test") measurement.measuredAt.toEpochMilli() else HistoryMerge.readingTime(measurement).toEpochMilli())
 
     fun text(serial: String, m: Measurement, showPhOpenAir: Boolean, showDeltaPh: Boolean, showDoseMl: Boolean): String {
         fun value(number: Double) = String.format(Locale.US, "%.2f", number)

@@ -175,17 +175,29 @@ class SecureStore(context: Context) {
         }
     }
 
-    fun measurementHistory(): List<Pair<String, Measurement>> {
+    fun measurementHistory(): List<Pair<String, Measurement>> = synchronized(historyLock) {
         val history = runCatching { JSONArray(prefs.getString("measurement_history", "[]") ?: "[]") }.getOrElse { JSONArray() }
-        return buildList {
+        val parsed = buildList {
             for (i in 0 until history.length()) {
                 val parsed = parseMeasurementJson(history.optJSONObject(i)) ?: continue
                 add(parsed)
             }
         }
+        val merged = HistoryMerge.merge(parsed)
+        // Repair already-saved duplicate/partial rows on the first read after upgrade.
+        if (merged != parsed) {
+            val updated = JSONArray()
+            merged.forEach { (serial, measurement) -> updated.put(measurementJson(serial, measurement)) }
+            prefs.edit().putString("measurement_history", updated.toString()).apply()
+            merged.firstOrNull()?.let { (serial, measurement) -> saveLatestMeasurement(serial, measurement) }
+        }
+        merged
     }
 
     fun lastStoredMeasurement(): Pair<String, Measurement>? {
+        val history = measurementHistory()
+        history.firstOrNull { it.first.equals(selectedDevice(), true) }?.let { return it }
+        history.firstOrNull()?.let { return it }
         val raw = prefs.getString("last_measurement_json", null) ?: return null
         return runCatching { parseMeasurementJson(JSONObject(raw)) }.getOrNull()
     }

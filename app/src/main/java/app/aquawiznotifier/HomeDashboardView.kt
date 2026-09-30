@@ -92,8 +92,9 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         val todayValues = all.filter { it.measuredAt.atZone(ZoneId.systemDefault()).toLocalDate() == today }.mapNotNull { it.doseMl }
         dailyDose.text = if (todayValues.isEmpty()) "—" else "%.2f".format(todayValues.sum())
         val since = Instant.now().minusSeconds(selectedRange.seconds)
-        val displayed = ((if (pointsDevice == serial) points else emptyList()) + all)
-            .filter { !it.measuredAt.isBefore(since) }.distinctBy { it.measuredAt }.sortedBy { it.measuredAt }
+        val displayed = HistoryMerge.merge(((if (pointsDevice == serial) points else emptyList()) + all)
+            .map { serial to it }).map { it.second }.filter { !it.measuredAt.isBefore(since) }.sortedBy { it.measuredAt }
+        chart.setOverview(selectedRange != Range.DAY)
         chart.setMeasurements(displayed, summary?.khLow, summary?.khHigh)
         val signature = displayed.lastOrNull()?.toString() + selectedRange.name + serial
         if (signature != displaySignature) { displayed.lastOrNull()?.let(::showSelected); displaySignature = signature }
@@ -102,7 +103,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
     private fun buildSummary() {
         val hero = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL; background = DiagonalHero()
-            elevation = dp(3).toFloat(); clipToOutline = true; setPadding(dp(2), dp(2), dp(2), dp(2))
+            clipToOutline = true; setPadding(dp(1), dp(1), dp(1), dp(1))
         }
         val kh = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(12), dp(12))
@@ -129,16 +130,15 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         root.addView(hero, full().apply { bottomMargin = dp(8) })
         val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
         row.addView(card("KH Target", khTarget, "dKH"), weighted(true))
-        row.addView(LinearLayout(context).apply {
+        row.addView(HeroCardLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            background = AwUi.surface(context, radius = 18); elevation = dp(3).toFloat()
             setPadding(dp(10), dp(2), dp(6), dp(2))
             addView(AwUi.button(context, "Calibrate").apply {
                 textSize = 18f; background = rounded(Color.WHITE, 12f); setPadding(0, 0, 0, 0)
                 setAutoSizeTextTypeUniformWithConfiguration(12, 18, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
                 setSingleLine(true); setOnClickListener { openOfficialAquaWiz() }
             }, LinearLayout.LayoutParams(0, dp(44), 1f))
-            addView(settingsIcon("Calibrate"), LinearLayout.LayoutParams(dp(32), dp(44)))
+            addView(exitIcon("Calibrate"), LinearLayout.LayoutParams(dp(32), dp(44)))
         }, weighted(false))
         root.addView(row, full().apply { bottomMargin = dp(8) })
         val doses = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
@@ -147,11 +147,8 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         root.addView(doses, full().apply { bottomMargin = dp(8) })
     }
     private fun buildChart() {
-        val card = LinearLayout(context).apply {
+        val card = HeroCardLayout(context, cornerRadius = 24).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(8), dp(8), dp(8), dp(8))
-            background = AwUi.surface(context, radius = 24, border = false)
-            foreground = AwUi.surface(context, color = Color.TRANSPARENT, radius = 24)
-            clipToOutline = true; elevation = dp(3).toFloat()
         }
         var row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
         ChartSeries.values().forEachIndexed { index, series ->
@@ -252,10 +249,9 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         try { context.startActivity((launch ?: Intent(Intent.ACTION_VIEW, Uri.parse("https://www.aquawiz.net"))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         catch (e: Exception) { Toast.makeText(context, "Unable to open AquaWiz", Toast.LENGTH_SHORT).show() }
     }
-    private fun card(title: String, value: TextView, unit: String) = LinearLayout(context).apply {
+    private fun card(title: String, value: TextView, unit: String) = HeroCardLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(10), dp(4), dp(6), dp(4))
-        background = AwUi.surface(context, radius = 18); elevation = dp(3).toFloat()
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             addView(label(title, 11f, Color.DKGRAY).apply {
@@ -264,11 +260,12 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
             }, fullHeight(16))
             addView(valueWithUnit(value, unit, Color.BLACK), fullHeight(30))
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        if (title != "Today's Dosing") addView(settingsIcon(title), LinearLayout.LayoutParams(dp(32), dp(44)))
+        if (title != "Today's Dosing") addView(exitIcon(title), LinearLayout.LayoutParams(dp(32), dp(44)))
     }
-    private fun settingsIcon(title: String) = TextView(context).apply {
-        text = "⚙"; textSize = 18f; gravity = Gravity.CENTER; background = rounded(0xFFF1F1F1.toInt(), 16f)
-        contentDescription = "Open " + title + " settings in AquaWiz"; setOnClickListener { openOfficialAquaWiz() }
+    private fun exitIcon(title: String) = ImageButton(context).apply {
+        setImageResource(R.drawable.ic_open_aw); scaleType = ImageView.ScaleType.FIT_CENTER
+        setPadding(dp(5), dp(11), dp(5), dp(11)); background = rounded(0xFFF1F1F1.toInt(), 16f)
+        contentDescription = "Open AquaWiz app for " + title; setOnClickListener { openOfficialAquaWiz() }
     }
     private fun valueWithUnit(value: TextView, unit: String, color: Int): MeasurementValueView {
         value.gravity = Gravity.CENTER_VERTICAL; value.setSingleLine(true)
@@ -292,10 +289,8 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
             paint.shader = LinearGradient(box.width() * 0.45f, 0f, box.width(), box.height(), 0xFF2386F8.toInt(), 0xFF397CF0.toInt(), Shader.TileMode.CLAMP)
             val diagonal = Path().apply { moveTo(box.width() * 0.57f, 0f); lineTo(box.width(), 0f); lineTo(box.width(), box.height()); lineTo(box.width() * 0.43f, box.height()); close() }
             canvas.drawPath(diagonal, paint); canvas.restore()
-            paint.shader = null; paint.color = AwUi.BORDER; paint.style = Paint.Style.STROKE; paint.strokeWidth = dp(2).toFloat()
-            val inset = paint.strokeWidth / 2
-            canvas.drawRoundRect(RectF(box.left + inset, box.top + inset, box.right - inset, box.bottom - inset), dp(24) - inset, dp(24) - inset, paint)
-            paint.style = Paint.Style.FILL
+            paint.shader = null
+            AwUi.drawBorder(canvas, box, dp(24).toFloat(), resources.displayMetrics.density)
         }
         override fun setAlpha(alpha: Int) { paint.alpha = alpha }
         override fun setColorFilter(filter: ColorFilter?) { paint.colorFilter = filter }

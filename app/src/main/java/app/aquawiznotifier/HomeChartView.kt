@@ -26,6 +26,7 @@ class HomeChartView(context: Context) : View(context) {
     private var selected: Int? = null
     private var zoom = 1.0
     private var center = 0.5
+    private var overview = false
     var onSelected: ((Measurement) -> Unit)? = null
 
     private val scale = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
@@ -51,8 +52,9 @@ class HomeChartView(context: Context) : View(context) {
         invalidate()
     }
     fun resetZoom() { zoom = 1.0; center = 0.5; invalidate() }
+    fun setOverview(enabled: Boolean) { if (overview != enabled) { overview = enabled; invalidate() } }
     fun setMeasurements(measurements: List<Measurement>, lowLimit: Double? = null, highLimit: Double? = null) {
-        val sorted = measurements.sortedBy { it.measuredAt }
+        val sorted = HistoryMerge.merge(measurements.map { "chart" to it }).map { it.second }.sortedBy { it.measuredAt }
         if (items == sorted && limits == (lowLimit to highLimit)) return
         val selectedTime = selected?.let { items.getOrNull(it)?.measuredAt }
         items = sorted
@@ -122,7 +124,8 @@ class HomeChartView(context: Context) : View(context) {
         fun x(m: Measurement) = left + (right - left) * ((m.measuredAt.toEpochMilli() - minTime).toDouble() / max(1, maxTime - minTime)).toFloat()
         visible.forEach { series ->
             val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = series.color; style = Paint.Style.STROKE; strokeWidth = dp(2.5f); strokeCap = Paint.Cap.ROUND
+                color = series.color; style = Paint.Style.STROKE; strokeWidth = dp(2.5f)
+                strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
                 pathEffect = when (styles[series]) {
                     ChartLineStyle.DASHED -> DashPathEffect(floatArrayOf(dp(8f), dp(5f)), 0f)
                     ChartLineStyle.DOTTED -> DashPathEffect(floatArrayOf(dp(1f), dp(5f)), 0f)
@@ -132,18 +135,29 @@ class HomeChartView(context: Context) : View(context) {
             canvas.save()
             canvas.clipRect(left - dp(4f), top - dp(4f), right + dp(4f), bottom + dp(4f))
             val path = Path()
-            var continuing = false
+            val group = mutableListOf<ChartCurve.Point>()
+            fun finishGroup() {
+                if (group.isEmpty()) return
+                path.moveTo(group.first().x.toFloat(), group.first().y.toFloat())
+                if (overview) {
+                    ChartCurve.segments(group).forEach { segment ->
+                        path.cubicTo(segment.control1.x.toFloat(), segment.control1.y.toFloat(),
+                            segment.control2.x.toFloat(), segment.control2.y.toFloat(), segment.end.x.toFloat(), segment.end.y.toFloat())
+                    }
+                } else group.drop(1).forEach { path.lineTo(it.x.toFloat(), it.y.toFloat()) }
+                group.clear()
+            }
             items.forEach { m ->
                 val value = series.value(m)
-                if (value == null || !value.isFinite()) continuing = false
+                if (value == null || !value.isFinite()) finishGroup()
                 else {
-                    if (continuing) path.lineTo(x(m), seriesY(series, value)) else path.moveTo(x(m), seriesY(series, value))
-                    continuing = true
-                    canvas.drawCircle(x(m), seriesY(series, value), dp(1.5f), paint)
+                    group += ChartCurve.Point(x(m).toDouble(), seriesY(series, value).toDouble())
+                    if (!overview) canvas.drawCircle(x(m), seriesY(series, value), dp(1.5f), paint)
                 }
             }
+            finishGroup()
             canvas.drawPath(path, paint)
-            selected?.let { index -> series.value(items[index])?.takeIf { it.isFinite() }?.let { value ->
+            if (!overview) selected?.let { index -> series.value(items[index])?.takeIf { it.isFinite() }?.let { value ->
                 canvas.drawCircle(x(items[index]), seriesY(series, value), dp(4f), paint)
             } }
             canvas.restore()

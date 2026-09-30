@@ -15,6 +15,16 @@ object AwUi {
     fun dp(context: Context, value: Int) = (value * context.resources.displayMetrics.density).toInt()
     fun surface(context: Context, color: Int = Color.WHITE, radius: Int = 20, border: Boolean = true): android.graphics.drawable.Drawable =
         RoundedSurface(color, dp(context, radius).toFloat(), if (border) dp(context, 2).toFloat() else 0f)
+    fun drawBorder(canvas: android.graphics.Canvas, rect: android.graphics.RectF, radius: Float, width: Float) {
+        // Fill the ring between parallel contours, with no shadow or stroke overlap at corners.
+        val inner = android.graphics.RectF(rect).apply { inset(width, width) }
+        val path = android.graphics.Path().apply {
+            fillType = android.graphics.Path.FillType.EVEN_ODD
+            addRoundRect(rect, radius, radius, android.graphics.Path.Direction.CW)
+            addRoundRect(inner, (radius - width).coerceAtLeast(0f), (radius - width).coerceAtLeast(0f), android.graphics.Path.Direction.CW)
+        }
+        canvas.drawPath(path, android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = BORDER })
+    }
     fun label(context: Context, text: String, size: Float, bold: Boolean = false) = TextView(context).apply {
         this.text = text; textSize = size; setTextColor(INK); includeFontPadding = false
         typeface = context.resources.getFont(if (bold) R.font.aw_extrabold else R.font.aw_regular)
@@ -34,7 +44,7 @@ object AwUi {
     }
 }
 
-/** Stroke center and corner radius share the same inset, keeping corners exactly parallel. */
+/** Filled concentric contours keep the border equally thin along straight lines and corners. */
 private class RoundedSurface(private val fill: Int, private val radius: Float, private val stroke: Float) : android.graphics.drawable.Drawable() {
     private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
     override fun draw(canvas: android.graphics.Canvas) {
@@ -42,10 +52,7 @@ private class RoundedSurface(private val fill: Int, private val radius: Float, p
         paint.style = android.graphics.Paint.Style.FILL; paint.color = fill
         canvas.drawRoundRect(rect, radius, radius, paint)
         if (stroke > 0f) {
-            val inset = stroke / 2f
-            rect.inset(inset, inset)
-            paint.style = android.graphics.Paint.Style.STROKE; paint.color = AwUi.BORDER; paint.strokeWidth = stroke
-            canvas.drawRoundRect(rect, (radius - inset).coerceAtLeast(0f), (radius - inset).coerceAtLeast(0f), paint)
+            AwUi.drawBorder(canvas, rect, radius, stroke)
         }
     }
     override fun getOutline(outline: android.graphics.Outline) { outline.setRoundRect(bounds, radius) }

@@ -36,4 +36,9 @@ class MeasurementNotificationTest {
         assertNotEquals(MeasurementNotification.tag("KH-A", first),
             MeasurementNotification.tag("KH-A", first.copy(measuredAt = first.measuredAt.plusMillis(1))))
     }
+    @Test fun currentAndGraphCopiesUseOneNotificationIdentity() {
+        assertEquals(MeasurementNotification.tag("KH-A", reading),
+            MeasurementNotification.tag("KH-A", reading.copy(measuredAt = reading.measuredAt.plusSeconds(20),
+                rawId = "graph:1", phOpenAir = null, deltaPh = null, doseMl = null)))
+    }
 }

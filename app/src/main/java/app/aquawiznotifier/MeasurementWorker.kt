@@ -24,12 +24,32 @@ class MeasurementWorker(context: Context, params: WorkerParameters) : Worker(con
             store.setLastError(null)
             val previousFingerprint = store.lastFingerprint()
             val isFirstBaseline = previousFingerprint == null
-            val isNew = previousFingerprint != measurement.fingerprint
+            val previousTime = store.lastMeasurementEpochMs()?.let(Instant::ofEpochMilli)
+            val isNew = previousTime?.let {
+                it.truncatedTo(java.time.temporal.ChronoUnit.MINUTES) != HistoryMerge.readingTime(measurement)
+            } ?: (previousFingerprint != measurement.fingerprint)
+
+            store.saveMeasurement(serial, measurement)
+            fun savedReading() = store.measurementHistory().firstOrNull {
+                it.first.equals(serial, true) && HistoryMerge.sameReading(it.second, measurement)
+            }?.second ?: measurement
+            var complete = savedReading()
+            if (complete.phOpenAir == null || complete.deltaPh == null || complete.doseMl == null) {
+                try {
+                    val graph = api.graphMeasurements(session, serial, measurement.measuredAt.minusSeconds(60))
+                    store.saveMeasurements(serial, graph)
+                    complete = savedReading()
+                } catch (e: AquaWizApi.ApiException) {
+                    if (e.status == 401 || e.status == 403) throw e
+                    store.appendActivity("Extra measurement values unavailable; retaining saved values")
+                } catch (e: Exception) {
+                    store.appendActivity("Extra measurement values unavailable; retaining saved values")
+                }
+            }
 
             if (isNew) {
-                store.saveMeasurement(serial, measurement)
                 if (!isFirstBaseline) {
-                    Notifier.measurement(applicationContext, serial, measurement)
+                    Notifier.measurement(applicationContext, serial, complete)
                     store.appendActivity("New measurement: [" + serial + "] " + "%.2f".format(measurement.kh) + " dKH" + (measurement.ph?.let { ", " + "%.2f".format(it) + " pH" } ?: ""))
                 } else {
                     store.appendActivity("Baseline established for " + serial + " at " + "%.2f".format(measurement.kh) + " dKH")

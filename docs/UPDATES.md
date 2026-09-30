@@ -1,3 +1,11 @@
+## v0.8.6
+
+- Current and server graph copies of a test merge by controller and displayed minute. Server values take priority, missing fields are filled, and existing saved duplicates are repaired automatically. Home combines cached/server readings through the same merge, removing duplicate-driven gaps.
+- Background checks enrich readings from the graph when extra values are missing. Notifications show only configured fields and use the same minute-level event identity; they never create History entries.
+- 3D/1W/1M/1Y curves are smoothly joined without data-point dots. 1D retains dots. Cubic controls stay within adjacent values to avoid inventing extrema; genuinely missing values still break the line.
+- Home cards use a solid 1dp border without elevation shadows. Graph clipping and the border are drawn against the same card bounds, including the bottom corners. Gear controls are replaced by exit icons that still open the official app.
+- Version code 17 and the unchanged permanent release key support updating v0.8.3–v0.8.5 installations.
+
 ## v0.8.5
 
 - The chart always shows a numbered right axis shared by delta-pH and dose in mL. Bounds include all enabled secondary values and padding; dose now overlays the main plot. KH/pH and target limits retain their separate left axis.
