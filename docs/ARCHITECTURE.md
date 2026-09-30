@@ -90,13 +90,12 @@ Every subsequently detected measurement with a different fingerprint generates o
 The notification layout is:
 
 ```text
-[KH1-00-05117] New measurement result:
-8.42 dKH, 8.27 pH
-pH(O) 8.35 • ΔpH -0.08 • Dose 1.20 mL
-Measured 1:04 PM • ↑ 0.06 dKH
+[KH1-00-05117] New measurement result: 8.42 dKH, pH 8.27. • pH(O) 8.35 • ΔpH -0.08 • Dose 1.20 mL
 ```
 
-The optional second-line fields are individually configurable:
+Optional inline fields are individually configurable. Android wraps text as needed and displays posting time in its native header. Different controller/timestamp tags retain separate notifications.
+
+Configurable values:
 
 - pH(O)
 - ΔpH
