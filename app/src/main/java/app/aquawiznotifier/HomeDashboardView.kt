@@ -239,12 +239,10 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         }, LinearLayout.LayoutParams(dp(30), dp(30)))
         addView(heading, fullHeight(30)); addView(valueWithUnit(value, unit, Color.BLACK), fullHeight(58))
     }
-    private fun valueWithUnit(value: TextView, unit: String, color: Int) = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; isBaselineAligned = true
+    private fun valueWithUnit(value: TextView, unit: String, color: Int): MeasurementValueView {
         value.gravity = Gravity.CENTER_VERTICAL; value.setSingleLine(true)
         value.setAutoSizeTextTypeUniformWithConfiguration(18, value.textSize.div(resources.displayMetrics.scaledDensity).toInt(), 1, android.util.TypedValue.COMPLEX_UNIT_SP)
-        addView(value, LinearLayout.LayoutParams(0, dp(58), 1f))
-        addView(label(unit, 12f, color).apply { setPadding(dp(4), 0, 0, 0) })
+        return MeasurementValueView(context, value, label(unit, 12f, color))
     }
     private fun label(value: String, size: Float, color: Int, heavy: Boolean = false) = TextView(context).apply {
         text = value; textSize = size; setTextColor(color); typeface = if (heavy) bold else regular; includeFontPadding = false; setPadding(0, 0, 0, 0)

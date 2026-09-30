@@ -239,3 +239,12 @@ Validation: unit tests cover settings isolation/scaling, chart bounds, current a
 - Tab order: Home, History, Status, Config.
 
 Validation: bounds tests cover below/above-target readings, enabled versus hidden lines, nonfinite values, and 0.2 padding; date tests cover midnight/noon/afternoon and old log timestamps.
+
+## 0.8.2 Screenshot follow-up
+
+- One bold notification text block follows the Alkatronic wording, with selected optional values appended inline and natural wrapping on narrow screens.
+- Removed the manual measured-date header. Android's timestamp reflects posting time.
+- Notification identity is controller plus measurement timestamp; new readings retain prior individual notifications, while retries of the same reading update it without alerting twice. Test notifications receive distinct timestamps.
+- Home unit labels are positioned next to their numbers on the same baseline, replacing the stretched spacing visible in the supplied screenshot.
+
+Validation covers notification wording, absent dates/newlines, missing optional values, toggle behavior, distinct readings/controllers, repeated test notifications, and stable identity across payload changes.

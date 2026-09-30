@@ -310,3 +310,7 @@ Network destinations are limited to:
 ## Launcher icon
 
 The public build uses the selected white-background blue/cyan droplet-and-alert icon. Android adaptive and legacy launcher resources both point to the selected artwork for visual consistency across launchers.
+
+## Measurement notification presentation (0.8.2)
+
+MeasurementNotification builds a single date-free text block with selected optional values inline. Notifier applies a bold span to both compact and expanded text, using Android posting time in the native header. It posts with notify(controller/timestamp tag, measurement ID, notification), preserving separate readings while making retries idempotent. Each result remains until opened or dismissed, subject to Android notification retention/grouping. Home numeric/unit rows use MeasurementValueView to align unit baselines and keep units directly beside autosized values.

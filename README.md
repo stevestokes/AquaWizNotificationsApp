@@ -20,9 +20,8 @@ Android only. This is a sideloaded APK. On first install, Android may ask you to
 
 - Android notification for every newly detected AquaWiz measurement.
 - Alkatronic-style measurement notification:
-  - `[KH1-00-05117] New measurement result:`
-  - `8.42 dKH, 8.27 pH`
-- Optional expanded detail line:
+  - `[KH1-00-05117] New measurement result: 8.42 dKH, pH 8.27.`
+- Optional inline details:
   - `pH(O) 8.35 • ΔpH -0.08 • Dose 1.20 mL`
 - Individual on/off controls for pH(O), ΔpH, and Dose.
 - Adaptive polling anchored to the controller's actual measurement timestamp.
@@ -41,7 +40,7 @@ Android only. This is a sideloaded APK. On first install, Android may ask you to
 
 ## AquaWiz Web Login and bearer-token authentication
 
-Version 0.8.1 uses **AquaWiz Web Login** as the only authentication path, opening it automatically when no session is saved. Real-device testing confirmed that AquaWiz Notifier can poll with a web-issued AquaWiz bearer token while the official AquaWiz mobile app remains logged in and functional.
+Version 0.8.2 uses **AquaWiz Web Login** as the only authentication path, opening it automatically when no session is saved. Real-device testing confirmed that AquaWiz Notifier can poll with a web-issued AquaWiz bearer token while the official AquaWiz mobile app remains logged in and functional.
 
 The flow opens the official AquaWiz website inside an in-app WebView. AquaWiz itself handles the username/password form. AquaWiz Notifier captures only the returned `access_token`, validates it by reading the latest measurement, stores it encrypted with Android Keystore, and then polls normally.
 
@@ -209,8 +208,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 12
-versionName = "0.8.1"
+versionCode = 13
+versionName = "0.8.2"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -222,7 +221,7 @@ The tagged-release workflow expects these GitHub Actions secrets:
 - `AQUAWIZ_KEY_ALIAS`
 - `AQUAWIZ_KEY_PASSWORD`
 
-A tag such as `v0.8.1` builds a signed release APK and publishes two release assets: `AquaWizNotifier.apk` for the permanent latest-download link and `AquaWizNotifier-v0.8.1.apk` for versioned archives.
+A tag such as `v0.8.2` builds a signed release APK and publishes two release assets: `AquaWizNotifier.apk` for the permanent latest-download link and `AquaWizNotifier-v0.8.2.apk` for versioned archives.
 
 Do not lose the release keystore. If it is lost, existing users cannot install future APKs as normal upgrades.
 
@@ -284,3 +283,7 @@ Home follows the official AquaWiz diagonal summary card, rounded tiles, and Plus
 ## 0.8.1 Layout polish
 
 Home titles, values, units, and footer rows align consistently. All Home cards share a darker 2dp border. Graph range controls use rounded selection buttons, while tight 0.2-padded bounds keep target limits and enabled lines visible, including readings outside the target range. History shows all five values in alternating rows without a detail dialog. Config groups connection state, notification toggles, and app actions; connection editors expand when needed. Tab order is Home, History, Status, Config.
+
+## 0.8.2 Notifications and unit alignment
+
+Measurement notifications use one bold text block, with selected optional fields inline and no manually formatted date. Android shows the time the notification was posted. Each controller/timestamp has a unique notification tag, so new results accumulate as individual notifications until opened or dismissed; repeat delivery of the same reading updates only that reading. Android may group the individual notifications automatically. Home units sit beside their numeric values on the same baseline.

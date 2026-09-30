@@ -8,9 +8,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import kotlin.math.abs
+import android.graphics.Typeface
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.StyleSpan
 
 object Notifier {
     private const val CHANNEL = "measurements"
@@ -29,35 +30,12 @@ object Notifier {
         }
     }
 
-    fun measurement(context: Context, serial: String, m: Measurement, previousKh: Double?) {
+    fun measurement(context: Context, serial: String, m: Measurement) {
         if (!allowed(context)) return
         ensureChannel(context)
-        val time = AppDates.format(m.measuredAt)
-        val change = previousKh?.let {
-            val delta = m.kh - it
-            val arrow = when { delta > 0.0001 -> "↑"; delta < -0.0001 -> "↓"; else -> "→" }
-            "$arrow ${"%.2f".format(abs(delta))}"
-        }
         val store = SecureStore(context)
-        val title = "[$serial] New measurement result:"
-        val primary = buildString {
-            append("%.2f".format(m.kh))
-            append(" dKH")
-            if (m.ph != null) {
-                append(", ")
-                append("%.2f".format(m.ph))
-                append(" pH")
-            }
-        }
-        val optional = mutableListOf<String>()
-        if (store.showPhOpenAir() && m.phOpenAir != null) optional += "pH(O) " + "%.2f".format(m.phOpenAir)
-        if (store.showDeltaPh() && m.deltaPh != null) optional += "ΔpH " + "%+.2f".format(m.deltaPh)
-        if (store.showDoseMl() && m.doseMl != null) optional += "Dose " + "%.2f".format(m.doseMl) + " mL"
-        val expanded = if (optional.isEmpty()) primary else primary + "\n" + optional.joinToString(" • ")
-        val subText = buildString {
-            append("Measured $time")
-            if (change != null) append(" • $change dKH")
-        }
+        val message = MeasurementNotification.text(serial, m, store.showPhOpenAir(), store.showDeltaPh(), store.showDoseMl())
+        val text = SpannableString(message).apply { setSpan(StyleSpan(Typeface.BOLD), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
         val pending = PendingIntent.getActivity(
             context,
             1,
@@ -66,16 +44,15 @@ object Notifier {
         )
         val n = android.app.Notification.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_aquawiz_notify)
-            .setContentTitle(title)
-            .setContentText(primary)
-            .setStyle(android.app.Notification.BigTextStyle().bigText(expanded))
-            .setSubText(subText)
+            .setContentText(text)
+            .setStyle(android.app.Notification.BigTextStyle().bigText(text))
+            .setOnlyAlertOnce(true)
             .setContentIntent(pending)
             .setAutoCancel(true)
             .setShowWhen(true)
-            .setWhen(m.measuredAt.toEpochMilli())
+            .setWhen(System.currentTimeMillis())
             .build()
-        context.getSystemService(NotificationManager::class.java).notify(ID_MEASUREMENT, n)
+        context.getSystemService(NotificationManager::class.java).notify(MeasurementNotification.tag(serial, m), ID_MEASUREMENT, n)
     }
 
     fun signInRequired(context: Context) {
@@ -117,7 +94,7 @@ object Notifier {
         val stored = store.lastStoredMeasurement()
         if (stored != null) {
             val (serial, m) = stored
-            measurement(context, serial, m.copy(measuredAt = java.time.Instant.now(), rawId = "test"), store.lastKh())
+            measurement(context, serial, m.copy(measuredAt = java.time.Instant.now(), rawId = "test"))
             return
         }
 
@@ -126,7 +103,7 @@ object Notifier {
             Measurement(8.24, java.time.Instant.now(), rawId = "test", ph = 8.17, phOpenAir = 8.28, deltaPh = -0.11, doseMl = 1.35),
             Measurement(8.05, java.time.Instant.now(), rawId = "test", ph = 8.26, phOpenAir = 8.34, deltaPh = -0.08, doseMl = 1.10),
         )
-        measurement(context, "KH1-00-00000", samples.random(), null)
+        measurement(context, "KH1-00-00000", samples.random())
     }
 
 

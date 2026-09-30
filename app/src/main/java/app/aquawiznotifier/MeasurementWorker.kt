@@ -23,14 +23,13 @@ class MeasurementWorker(context: Context, params: WorkerParameters) : Worker(con
 
             store.setLastError(null)
             val previousFingerprint = store.lastFingerprint()
-            val previousKh = store.lastKh()
             val isFirstBaseline = previousFingerprint == null
             val isNew = previousFingerprint != measurement.fingerprint
 
             if (isNew) {
                 store.saveMeasurement(serial, measurement)
                 if (!isFirstBaseline) {
-                    Notifier.measurement(applicationContext, serial, measurement, previousKh)
+                    Notifier.measurement(applicationContext, serial, measurement)
                     store.appendActivity("New measurement: [" + serial + "] " + "%.2f".format(measurement.kh) + " dKH" + (measurement.ph?.let { ", " + "%.2f".format(it) + " pH" } ?: ""))
                 } else {
                     store.appendActivity("Baseline established for " + serial + " at " + "%.2f".format(measurement.kh) + " dKH")
