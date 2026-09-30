@@ -1,3 +1,9 @@
+## v0.8.4
+
+- Measurement notifications use bold TextViews in decorated custom collapsed, expanded, and heads-up layouts. This keeps font weight in the actual notification view rather than relying only on spans in Android's standard body template.
+- The collapsed message remains one line; expansion shows all selected values in the same inline text block. Android still provides the app/icon/time header. Notification stacking and actions are unchanged.
+- Version code 15 and the same permanent release key allow installation over v0.8.3.
+
 ## v0.8.3
 
 - CI downloads are signed release APKs using the permanent repository signing key. Missing signing secrets fail the build instead of distributing a new runner's debug signature. Version code 14 supports upgrades from earlier versions signed with that same key. Existing debug installations need one transition reinstall because their private keys were not retained.

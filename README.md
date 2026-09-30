@@ -208,8 +208,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 14
-versionName = "0.8.3"
+versionCode = 15
+versionName = "0.8.4"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.

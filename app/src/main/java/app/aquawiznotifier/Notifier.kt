@@ -12,6 +12,7 @@ import android.graphics.Typeface
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.StyleSpan
+import android.widget.RemoteViews
 
 object Notifier {
     private const val CHANNEL = "measurements"
@@ -45,7 +46,12 @@ object Notifier {
         val n = android.app.Notification.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_aquawiz_notify)
             .setContentText(text)
-            .setStyle(android.app.Notification.BigTextStyle().bigText(text))
+            // Set the font on the actual TextView: some Android templates normalize
+            // CharSequence styling, even when the fallback text carries a bold span.
+            .setStyle(android.app.Notification.DecoratedCustomViewStyle())
+            .setCustomContentView(measurementView(context, R.layout.notification_measurement, message))
+            .setCustomBigContentView(measurementView(context, R.layout.notification_measurement_expanded, message))
+            .setCustomHeadsUpContentView(measurementView(context, R.layout.notification_measurement, message))
             .setOnlyAlertOnce(true)
             .setContentIntent(pending)
             .setAutoCancel(true)
@@ -54,6 +60,11 @@ object Notifier {
             .build()
         context.getSystemService(NotificationManager::class.java).notify(MeasurementNotification.tag(serial, m), ID_MEASUREMENT, n)
     }
+
+    private fun measurementView(context: Context, layout: Int, message: String) =
+        RemoteViews(context.packageName, layout).apply {
+            setTextViewText(R.id.notification_message, message)
+        }
 
     fun signInRequired(context: Context) {
         if (!allowed(context)) return
