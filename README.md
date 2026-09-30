@@ -16,11 +16,23 @@ Android only. This is a sideloaded APK. On first install, Android may ask you to
 
 [View all releases](https://github.com/stevestokes/AquaWizNotificationsApp/releases)
 
+## Screenshots
+
+Device ID suffixes are redacted.
+
+| Home | History |
+|:---:|:---:|
+| <img src="docs/screenshots/home.png" alt="Home dashboard with KH, pH, dosing and an interactive chart" width="280"> | <img src="docs/screenshots/history.png" alt="Measurement history with all five values" width="280"> |
+
+| Config | Notification |
+|:---:|:---:|
+| <img src="docs/screenshots/config.png" alt="Connection and notification settings with the device suffix redacted" width="280"> | <img src="docs/screenshots/notification.png" alt="Bold measurement notification with the device suffix redacted" width="280"> |
+
 ## Features
 
 - Android notification for every newly detected AquaWiz measurement.
 - Alkatronic-style measurement notification:
-  - `[KH1-00-05117] New measurement result: 8.42 dKH, pH 8.27.`
+  - `[KH1-00-XXXXX] New measurement result: 8.42 dKH, pH 8.27.`
 - Optional inline details:
   - `pH(O) 8.35 • ΔpH -0.08 • Dose 1.20 mL`
 - Individual on/off controls for pH(O), ΔpH, and Dose.
