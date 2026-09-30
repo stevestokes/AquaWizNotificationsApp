@@ -101,6 +101,18 @@ class SecureStore(context: Context) {
     fun setAuthPaused(v: Boolean) = prefs.edit().putBoolean("auth_paused", v).apply()
     fun sharedTokenMode(): Boolean = prefs.getBoolean("shared_token_mode", false)
     fun setSharedTokenMode(v: Boolean) = prefs.edit().putBoolean("shared_token_mode", v).apply()
+
+    fun authMethod(): Int {
+        if (prefs.contains("auth_method")) return prefs.getInt("auth_method", 0).coerceIn(0, 2)
+        // Migration for 0.5.x installs: preserve the prior manual-token/password selection.
+        if (prefs.contains("shared_token_mode")) {
+            return if (prefs.getBoolean("shared_token_mode", false)) 1 else 2
+        }
+        // Fresh installs default to AquaWiz Web Login.
+        return 0
+    }
+
+    fun setAuthMethod(v: Int) = prefs.edit().putInt("auth_method", v.coerceIn(0, 2)).apply()
     fun measurementIntervalMinutes(): Long = prefs.getLong("measurement_interval", 60L).coerceIn(15L, 24L * 60L)
     fun setMeasurementIntervalMinutes(v: Long) = prefs.edit().putLong("measurement_interval", v.coerceIn(15L, 24L * 60L)).apply()
     fun baseUrl(): String = prefs.getString("base_url", AquaWizApi.GLOBAL_BASE) ?: AquaWizApi.GLOBAL_BASE

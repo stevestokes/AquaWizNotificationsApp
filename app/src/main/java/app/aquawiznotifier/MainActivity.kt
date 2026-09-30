@@ -228,8 +228,9 @@ class MainActivity : Activity() {
                 this@MainActivity,
                 android.R.layout.simple_spinner_dropdown_item,
                 listOf(
-                    "AquaWiz username/password",
-                    "Existing bearer token (experimental)"
+                    "AquaWiz Web Login (recommended)",
+                    "Existing bearer token",
+                    "AquaWiz username/password (fallback)"
                 )
             )
         }
@@ -292,9 +293,9 @@ class MainActivity : Activity() {
             }
         }
         val stop = Button(this).apply {
-            text = "Stop & sign out"
+            text = "Stop & disconnect"
             setOnClickListener {
-                store.appendActivity("Monitoring stopped and AquaWiz session cleared")
+                store.appendActivity("Monitoring stopped and notifier session cleared")
                 PollScheduler.cancel(this@MainActivity)
                 store.clearSession()
                 store.clearMonitoringState()
@@ -304,8 +305,8 @@ class MainActivity : Activity() {
             }
         }
 
-        root.addView(textView("Shared-token test mode never calls AquaWiz /auth. It reuses an existing bearer token from the official app so we can test whether both apps can stay active on one cloud session.", 12f))
-        root.addView(textView("Important: username/password mode creates a new AquaWiz session and may sign the official AquaWiz app out. Background polling never auto-logs in after a rejected token.", 12f))
+        root.addView(textView("Recommended: use AquaWiz Web Login. The official AquaWiz page handles your credentials and the notifier captures only the returned bearer token. This avoids notifier-side credential login.", 12f))
+        root.addView(textView("Manual bearer-token entry and username/password remain available as fallback options. Background polling never auto-logs in after a rejected token.", 12f))
         root.addView(connectButton, full())
         root.addView(test, full())
         root.addView(updates, full())
@@ -339,11 +340,15 @@ class MainActivity : Activity() {
 
     private fun updateAuthModeUi() {
         if (!::authMode.isInitialized || !::password.isInitialized || !::accessToken.isInitialized) return
-        val shared = authMode.selectedItemPosition == 1
-        password.visibility = if (shared) View.GONE else View.VISIBLE
-        accessToken.visibility = if (shared) View.VISIBLE else View.GONE
+        val mode = authMode.selectedItemPosition
+        password.visibility = if (mode == 2) View.VISIBLE else View.GONE
+        accessToken.visibility = if (mode == 1) View.VISIBLE else View.GONE
         if (::connectButton.isInitialized) {
-            connectButton.text = if (shared) "Validate shared token & start" else "Sign in & start"
+            connectButton.text = when (mode) {
+                0 -> "Open AquaWiz Web Login"
+                1 -> "Validate token & start"
+                else -> "Sign in & start"
+            }
         }
     }
 
@@ -353,13 +358,13 @@ class MainActivity : Activity() {
             session.username.isNotBlank() &&
             session.accessToken.isNotBlank() &&
             !store.selectedDevice().isNullOrBlank() &&
-            (store.sharedTokenMode() || session.password.isNotBlank())
+            (store.authMethod() != 2 || session.password.isNotBlank())
 
         showSection(if (configured) "status" else "config")
     }
 
     private fun signIn() {
-        val shared = authMode.selectedItemPosition == 1
+        val mode = authMode.selectedItemPosition
         val u = username.text.toString().trim()
         val p = password.text.toString()
         val token = accessToken.text.toString().trim()
@@ -370,92 +375,78 @@ class MainActivity : Activity() {
             showSection("config")
             return
         }
-        if (shared && token.isBlank()) {
-            toast("Paste the existing AquaWiz access token")
-            showSection("config")
-            return
-        }
-        if (shared && typedSerial.isBlank()) {
-            toast("Enter the AquaWiz device serial for shared-token mode")
-            showSection("config")
-            return
-        }
-        if (!shared && p.isBlank()) {
-            toast("Enter username and password")
+        if (typedSerial.isBlank()) {
+            toast("Enter the AquaWiz device serial")
             showSection("config")
             return
         }
 
         saveConfig()
-        store.appendActivity(
-            if (shared) "Validating existing AquaWiz bearer token without calling /auth"
-            else "Signing in to AquaWiz with username/password"
-        )
-        updateStatus()
 
+        when (mode) {
+            0 -> {
+                store.appendActivity("Opening official AquaWiz web login to obtain a bearer token")
+                updateStatus()
+                val loginUrl = if (store.baseUrl().contains(".cn")) {
+                    "https://www.aquawiz.net/auth/cn/login"
+                } else {
+                    "https://www.aquawiz.net/auth/en"
+                }
+                AquaWizWebLogin(this, loginUrl) { capturedToken ->
+                    accessToken.setText(capturedToken)
+                    store.appendActivity("AquaWiz web login returned a bearer token; validating against controller")
+                    connectWithBearerToken(u, capturedToken, typedSerial, "web")
+                }.show()
+            }
+            1 -> {
+                if (token.isBlank()) {
+                    toast("Paste an AquaWiz access token")
+                    return
+                }
+                store.appendActivity("Validating existing AquaWiz bearer token without calling /auth")
+                updateStatus()
+                connectWithBearerToken(u, token, typedSerial, "token")
+            }
+            else -> {
+                if (p.isBlank()) {
+                    toast("Enter username and password")
+                    return
+                }
+                store.appendActivity("Signing in to AquaWiz with username/password")
+                updateStatus()
+                connectWithPassword(u, p, typedSerial)
+            }
+        }
+    }
+
+    private fun connectWithBearerToken(
+        usernameValue: String,
+        tokenValue: String,
+        deviceSerial: String,
+        source: String,
+    ) {
         Thread {
             try {
                 val api = AquaWizApi(store.baseUrl())
-                val session = if (shared) {
-                    Session(
-                        username = u,
-                        password = "",
-                        accessToken = token,
-                        devices = listOf(typedSerial),
-                    )
-                } else {
-                    api.login(u, p)
-                }
-
-                val chosenSerial = typedSerial.ifBlank { session.devices.firstOrNull().orEmpty() }
-                if (chosenSerial.isBlank()) {
-                    throw IllegalArgumentException("Device serial is required")
-                }
-
-                // Shared-token mode deliberately validates the bearer token directly against a
-                // measurement endpoint. It never calls /api/v1/KH/auth.
-                val baseline = api.latestMeasurement(session, chosenSerial)
-
-                store.clearMonitoringState()
-                store.setAuthPaused(false)
-                store.setSharedTokenMode(shared)
-                store.saveSession(session)
-                store.setSelectedDevice(chosenSerial)
-                store.saveMeasurement(chosenSerial, baseline)
-                store.setLastFingerprint(baseline.fingerprint)
-                store.setLastMeasurementEpochMs(baseline.measuredAt.toEpochMilli())
-                store.setLastKh(baseline.kh)
-                store.setLastPollEpochMs(System.currentTimeMillis())
-                store.setLastError(null)
-                store.appendActivity(
-                    if (shared) "Shared token validated; monitoring " + chosenSerial + " without a new AquaWiz login"
-                    else "Signed in; monitoring " + chosenSerial
+                val session = Session(
+                    username = usernameValue,
+                    password = "",
+                    accessToken = tokenValue,
+                    devices = listOf(deviceSerial),
                 )
-
-                PollScheduler.schedule(
-                    this,
-                    PollCadence.nextRun(
-                        Instant.now(),
-                        baseline.measuredAt,
-                        store.measurementIntervalMinutes()
-                    ),
-                )
-
+                val baseline = api.latestMeasurement(session, deviceSerial)
+                finishConnection(session, deviceSerial, baseline, authMethod = if (source == "web") 0 else 1)
                 runOnUiThread {
-                    if (typedSerial.isBlank()) serial.setText(chosenSerial)
-                    toast(
-                        if (shared) "Shared token works. Monitoring started without /auth."
-                        else "Signed in. Monitoring started."
-                    )
+                    toast("AquaWiz token validated. Monitoring started.")
                     showSection("status")
                     updateStatus()
                     updateHistory()
                 }
             } catch (e: Exception) {
-                val prefix = if (shared) "Shared-token validation failed: " else "Sign-in failed: "
-                store.appendActivity(prefix + (e.message ?: e.javaClass.simpleName))
+                val message = "Token validation failed: " + (e.message ?: e.javaClass.simpleName)
+                store.appendActivity(message)
                 runOnUiThread {
-                    toast(prefix + (e.message ?: e.javaClass.simpleName))
+                    toast(message)
                     showSection("config")
                     updateStatus()
                 }
@@ -463,12 +454,81 @@ class MainActivity : Activity() {
         }.start()
     }
 
+    private fun connectWithPassword(
+        usernameValue: String,
+        passwordValue: String,
+        deviceSerial: String,
+    ) {
+        Thread {
+            try {
+                val api = AquaWizApi(store.baseUrl())
+                val loggedIn = api.login(usernameValue, passwordValue)
+                val session = loggedIn.copy(
+                    devices = if (loggedIn.devices.isEmpty()) listOf(deviceSerial) else loggedIn.devices
+                )
+                val baseline = api.latestMeasurement(session, deviceSerial)
+                finishConnection(session, deviceSerial, baseline, authMethod = 2)
+                runOnUiThread {
+                    toast("Signed in. Monitoring started.")
+                    showSection("status")
+                    updateStatus()
+                    updateHistory()
+                }
+            } catch (e: Exception) {
+                val message = "Sign-in failed: " + (e.message ?: e.javaClass.simpleName)
+                store.appendActivity(message)
+                runOnUiThread {
+                    toast(message)
+                    showSection("config")
+                    updateStatus()
+                }
+            }
+        }.start()
+    }
+
+    private fun finishConnection(
+        session: Session,
+        deviceSerial: String,
+        baseline: Measurement,
+        authMethod: Int,
+    ) {
+        store.clearMonitoringState()
+        store.setAuthPaused(false)
+        store.setAuthMethod(authMethod)
+        store.setSharedTokenMode(authMethod != 2)
+        store.saveSession(session)
+        store.setSelectedDevice(deviceSerial)
+        store.saveMeasurement(deviceSerial, baseline)
+        store.setLastFingerprint(baseline.fingerprint)
+        store.setLastMeasurementEpochMs(baseline.measuredAt.toEpochMilli())
+        store.setLastKh(baseline.kh)
+        store.setLastPollEpochMs(System.currentTimeMillis())
+        store.setLastError(null)
+        store.appendActivity(
+            if (authMethod == 2) {
+                "Signed in; monitoring " + deviceSerial
+            } else {
+                "Bearer token validated; monitoring " + deviceSerial + " without a notifier-side AquaWiz login"
+            }
+        )
+
+        PollScheduler.schedule(
+            this,
+            PollCadence.nextRun(
+                Instant.now(),
+                baseline.measuredAt,
+                store.measurementIntervalMinutes()
+            ),
+        )
+    }
+
     private fun saveConfig() {
         store.setBaseUrl(
             if (region.selectedItemPosition == 1) AquaWizApi.CHINA_BASE
             else AquaWizApi.GLOBAL_BASE
         )
-        store.setSharedTokenMode(authMode.selectedItemPosition == 1)
+        store.setAuthMethod(authMode.selectedItemPosition)
+        store.setSharedTokenMode(authMode.selectedItemPosition != 2)
         serial.text.toString().trim().takeIf { it.isNotBlank() }?.let(store::setSelectedDevice)
         interval.text.toString().toLongOrNull()?.let(store::setMeasurementIntervalMinutes)
         store.setShowPhOpenAir(phOpenAirCheck.isChecked)
@@ -478,10 +538,10 @@ class MainActivity : Activity() {
 
     private fun populate() {
         val session = store.session()
-        authMode.setSelection(if (store.sharedTokenMode()) 1 else 0)
+        authMode.setSelection(store.authMethod())
         username.setText(session?.username.orEmpty())
         password.setText(session?.password.orEmpty())
-        accessToken.setText(if (store.sharedTokenMode()) session?.accessToken.orEmpty() else "")
+        accessToken.setText(if (store.authMethod() == 1) session?.accessToken.orEmpty() else "")
         serial.setText(store.selectedDevice() ?: session?.devices?.firstOrNull().orEmpty())
         interval.setText(store.measurementIntervalMinutes().toString())
         region.setSelection(if (store.baseUrl().contains(".cn")) 1 else 0)
@@ -508,7 +568,8 @@ class MainActivity : Activity() {
         lines += when {
             store.authPaused() -> "Status: monitoring paused (AquaWiz session conflict)"
             session == null -> "Status: not connected"
-            store.sharedTokenMode() -> "Status: connected with shared AquaWiz token as " + session.username
+            store.authMethod() == 0 -> "Status: connected via AquaWiz Web Login as " + session.username
+            store.authMethod() == 1 -> "Status: connected with AquaWiz bearer token as " + session.username
             else -> "Status: signed in as " + session.username
         }
         store.selectedDevice()?.let { lines += "Device: " + it }

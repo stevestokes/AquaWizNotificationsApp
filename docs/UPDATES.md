@@ -194,11 +194,18 @@ The public build uses app version `0.4.0`, the selected white/blue launcher icon
 Version `0.4.0` introduces the three-tab Status / History / Config interface, local full-field measurement history, baseline/history persistence independent of notification toggles, Config-first startup when required setup is missing, and test notifications that reuse the most recent real stored measurement when available.
 
 
-## 0.5.0 session-safety change
+## 0.6.0 session-safety change
 
-Version `0.5.0` removes automatic AquaWiz password re-login from background measurement polling. If the stored bearer token receives `401` or `403`, monitoring pauses rather than authenticating again. This change is based on real-device evidence that a new AquaWiz login can invalidate the session used by the official app.
+Version `0.6.0` removes automatic AquaWiz password re-login from background measurement polling. If the stored bearer token receives `401` or `403`, monitoring pauses rather than authenticating again. This change is based on real-device evidence that a new AquaWiz login can invalidate the session used by the official app.
 
 
-## 0.5.0 shared-token experiment
+## 0.6.0 shared-token experiment
 
-Version `0.5.0` adds an experimental mode for importing an existing AquaWiz bearer token. The mode validates the token directly against measurement APIs and never calls the AquaWiz credential-login endpoint. Its purpose is to test whether the official AquaWiz app and AquaWiz Notifier can simultaneously use the same cloud token without invalidating one another.
+Version `0.6.0` adds an experimental mode for importing an existing AquaWiz bearer token. The mode validates the token directly against measurement APIs and never calls the AquaWiz credential-login endpoint. Its purpose is to test whether the official AquaWiz app and AquaWiz Notifier can simultaneously use the same cloud token without invalidating one another.
+
+
+## 0.6.0 Web Login
+
+Version `0.6.0` promotes bearer-token authentication to the preferred path and adds an embedded **AquaWiz Web Login**. The official AquaWiz page handles credentials inside a WebView; AquaWiz Notifier captures only the returned bearer token, validates it against the configured controller, encrypts it locally, and starts monitoring. Manual bearer-token entry and direct username/password login remain as fallback options.
+
+Real-device testing confirmed that the official AquaWiz app can remain logged in while AquaWiz Notifier polls with a web-issued bearer token.

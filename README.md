@@ -39,26 +39,19 @@ Android only. This is a sideloaded APK. On first install, Android may ask you to
 - Measurement notifications open the installed official AquaWiz app when tapped; if AquaWiz is not installed, AquaWiz Notifier opens instead.
 - Custom white/blue AquaWiz Notifier launcher icon for the public build.
 
-## Experimental shared-token mode
+## AquaWiz Web Login and bearer-token authentication
 
-Version 0.5.0 adds an experimental **Existing bearer token** authentication mode. This mode is designed to test whether AquaWiz Notifier and the official AquaWiz app can safely share one cloud session.
+Version 0.6.0 makes **AquaWiz Web Login** the recommended authentication path. Real-device testing confirmed that AquaWiz Notifier can poll with a web-issued AquaWiz bearer token while the official AquaWiz mobile app remains logged in and functional.
 
-In shared-token mode, AquaWiz Notifier:
+The recommended flow opens the official AquaWiz website inside an in-app WebView. AquaWiz itself handles the username/password form. AquaWiz Notifier captures only the returned `access_token`, validates it by reading the latest measurement, stores it encrypted with Android Keystore, and then polls normally.
 
-- never calls `POST /api/v1/KH/auth`
-- requires the AquaWiz username, device serial, and an existing AquaWiz `access_token`
-- validates the token by reading the latest measurement directly
-- stores the imported bearer token encrypted with Android Keystore
-- uses the same normal polling and notification flow after validation
-- still pauses if AquaWiz later returns `401` or `403`
-
-The official AquaWiz app keeps its bearer token in Expo SecureStore under `user_token`. Android app sandboxing prevents AquaWiz Notifier from reading that storage automatically, so this mode currently requires manually obtaining the official app's bearer token for testing.
+The app still supports manual bearer-token entry and direct username/password login as fallback options. Android sandboxing prevents AquaWiz Notifier from reading the installed AquaWiz app's private Expo SecureStore directly, so Web Login is the clean handoff path without root or cooperation from the official app.
 
 ## AquaWiz session behavior
 
-Real-device testing indicates AquaWiz may invalidate an older account session when a new login occurs. To avoid a token ping-pong where the notifier repeatedly signs the official AquaWiz app out, background polling **does not automatically re-authenticate** after a `401` or `403` response.
+Real-device testing confirmed that the official AquaWiz mobile app can remain logged in while AquaWiz Notifier polls with a separate token issued by the AquaWiz website. Background polling still **does not automatically re-authenticate** after a `401` or `403` response; it pauses and waits for the user to reconnect.
 
-If AquaWiz rejects the notifier token, monitoring pauses and the app records the conflict in Status. A deliberate **Sign in & start** is required to authenticate again, and doing so may invalidate the current session in the official AquaWiz app.
+If AquaWiz rejects the notifier token, monitoring pauses and the app records the condition in Status. The recommended recovery is to reconnect through **AquaWiz Web Login** or provide a fresh bearer token.
 
 ## Measurement timing
 

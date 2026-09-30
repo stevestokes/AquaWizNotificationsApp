@@ -29,6 +29,12 @@ The GitHub request contains no AquaWiz username, password, token, or controller 
 
 Tapping a project/update link may open the user's browser to GitHub or Reef2Reef.
 
+## AquaWiz Web Login
+
+The recommended authentication flow loads only official AquaWiz HTTPS pages in an in-app WebView. The page itself handles the user's web credentials. A JavaScript bridge is limited to receiving a candidate bearer token and exposes no filesystem, credential, or app-control methods to page content.
+
+The notifier does not save the web password. Captured bearer tokens are stored only inside the existing Android Keystore-backed encrypted session store. Non-AquaWiz top-level navigation is blocked inside the login WebView.
+
 ## Measurement notification launch behavior
 
 When a measurement notification is tapped, the app queries installed launcher activities and opens the installed app whose visible label matches `AquaWiz`. AquaWiz Notifier excludes its own package and falls back to AquaWiz Notifier if no official AquaWiz launcher activity is found. No AquaWiz credentials are shared through this launch intent.

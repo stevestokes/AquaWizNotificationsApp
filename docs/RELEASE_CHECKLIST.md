@@ -4,7 +4,7 @@ Before publishing a tagged AquaWiz Notifier release:
 
 1. Confirm `versionCode` increased.
 2. Confirm `versionName` matches the intended Git tag.
-   - Example: `versionName = "0.5.0"` -> tag `v0.5.0`.
+   - Example: `versionName = "0.6.0"` -> tag `v0.6.0`.
 3. Run:
    ```bash
    ./scripts/verify.sh
@@ -37,12 +37,15 @@ Before publishing a tagged AquaWiz Notifier release:
 14. Tap a measurement notification and confirm the installed official AquaWiz app opens. If the official app is absent, confirm AquaWiz Notifier opens instead.
 14. Confirm repeated background polls do not duplicate a measurement notification.
 15. Confirm the next-poll schedule re-anchors to the actual AquaWiz measurement timestamp.
-16. Test shared-token mode with a known-good bearer token from the official AquaWiz app:
-    - select **Existing bearer token (experimental)**
-    - enter username, token, and device serial
-    - confirm **Validate shared token & start** retrieves a baseline
-    - confirm no request is made to `/api/v1/KH/auth`
-    - confirm the official AquaWiz app remains authenticated while notifier polling runs
+16. Test the recommended **AquaWiz Web Login** path:
+    - enter username and device serial
+    - select **AquaWiz Web Login (recommended)**
+    - confirm the official AquaWiz login page opens inside the notifier
+    - sign in on the AquaWiz page
+    - confirm the notifier captures the bearer token and closes the WebView
+    - confirm the token is validated against the controller and monitoring starts
+    - confirm the official AquaWiz mobile app remains authenticated while notifier polling runs
+17. Test manual **Existing bearer token** mode as a fallback and confirm it also starts without a notifier-side `/auth` call
 17. Confirm a 401/403 pauses monitoring, does **not** call AquaWiz login again, clears the next poll, and shows the session-conflict notification.
 17. Confirm the activity/diagnostic console:
     - appends new events
@@ -67,14 +70,14 @@ Before publishing a tagged AquaWiz Notifier release:
 27. Confirm the release keystore is backed up securely outside GitHub.
 28. Push the matching version tag:
     ```bash
-    git tag v0.5.0
-    git push origin v0.5.0
+    git tag v0.6.0
+    git push origin v0.6.0
     ```
 29. Confirm the **Tagged APK Release** workflow succeeds.
 30. Confirm the GitHub Release contains both signed APK assets:
     ```text
     AquaWizNotifier.apk
-    AquaWizNotifier-v0.5.0.apk
+    AquaWizNotifier-v0.6.0.apk
     ```
 31. Confirm the README's permanent latest-download URL works:
     ```text
