@@ -115,7 +115,7 @@ class HomeChartView(context: Context) : View(context) {
                 val value = delta.first + (delta.second - delta.first) * i / 5
                 val yy = mapY(value, delta, top, bottom)
                 canvas.drawLine(right, yy, right + dp(3f), yy, markerPaint)
-                canvas.drawText("%.$decimals".plus("f").format(value), right + dp(6f), yy + dp(4f), axisPaint)
+                canvas.drawText(("%." + decimals + "f").format(value), right + dp(6f), yy + dp(4f), axisPaint)
             }
         }
         if (showDose) {

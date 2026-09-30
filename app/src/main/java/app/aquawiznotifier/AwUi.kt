@@ -3,7 +3,6 @@ package app.aquawiznotifier
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.view.Gravity
 import android.widget.Button
@@ -14,7 +13,7 @@ object AwUi {
     val INK = 0xFF253348.toInt()
     val BLUE = 0xFF287DF0.toInt()
     fun dp(context: Context, value: Int) = (value * context.resources.displayMetrics.density).toInt()
-    fun surface(context: Context, color: Int = Color.WHITE, radius: Int = 20, border: Boolean = true) =
+    fun surface(context: Context, color: Int = Color.WHITE, radius: Int = 20, border: Boolean = true): android.graphics.drawable.Drawable =
         RoundedSurface(color, dp(context, radius).toFloat(), if (border) dp(context, 2).toFloat() else 0f)
     fun label(context: Context, text: String, size: Float, bold: Boolean = false) = TextView(context).apply {
         this.text = text; textSize = size; setTextColor(INK); includeFontPadding = false

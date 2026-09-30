@@ -119,7 +119,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         row.addView(card("KH Target", khTarget, "dKH"), weighted(true))
         row.addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; background = AwUi.surface(context, radius = 24)
-            elevation = dp(3).toFloat(); setPadding(dp(12), dp(14), dp(12), dp(14))
+            elevation = dp(3).toFloat(); setPadding(dp(14), dp(14), dp(14), dp(14))
             addView(LinearLayout(context).apply {
                 gravity = Gravity.END
                 addView(settingsIcon("Calibrate"), LinearLayout.LayoutParams(dp(30), dp(30)))
