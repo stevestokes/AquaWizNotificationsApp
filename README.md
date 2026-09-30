@@ -39,6 +39,21 @@ Android only. This is a sideloaded APK. On first install, Android may ask you to
 - Measurement notifications open the installed official AquaWiz app when tapped; if AquaWiz is not installed, AquaWiz Notifier opens instead.
 - Custom white/blue AquaWiz Notifier launcher icon for the public build.
 
+## Experimental shared-token mode
+
+Version 0.5.0 adds an experimental **Existing bearer token** authentication mode. This mode is designed to test whether AquaWiz Notifier and the official AquaWiz app can safely share one cloud session.
+
+In shared-token mode, AquaWiz Notifier:
+
+- never calls `POST /api/v1/KH/auth`
+- requires the AquaWiz username, device serial, and an existing AquaWiz `access_token`
+- validates the token by reading the latest measurement directly
+- stores the imported bearer token encrypted with Android Keystore
+- uses the same normal polling and notification flow after validation
+- still pauses if AquaWiz later returns `401` or `403`
+
+The official AquaWiz app keeps its bearer token in Expo SecureStore under `user_token`. Android app sandboxing prevents AquaWiz Notifier from reading that storage automatically, so this mode currently requires manually obtaining the official app's bearer token for testing.
+
 ## AquaWiz session behavior
 
 Real-device testing indicates AquaWiz may invalidate an older account session when a new login occurs. To avoid a token ping-pong where the notifier repeatedly signs the official AquaWiz app out, background polling **does not automatically re-authenticate** after a `401` or `403` response.

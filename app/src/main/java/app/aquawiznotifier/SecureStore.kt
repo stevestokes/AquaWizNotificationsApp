@@ -99,6 +99,8 @@ class SecureStore(context: Context) {
     fun clearNextPollEpochMs() = prefs.edit().remove("next_poll_ms").apply()
     fun authPaused(): Boolean = prefs.getBoolean("auth_paused", false)
     fun setAuthPaused(v: Boolean) = prefs.edit().putBoolean("auth_paused", v).apply()
+    fun sharedTokenMode(): Boolean = prefs.getBoolean("shared_token_mode", false)
+    fun setSharedTokenMode(v: Boolean) = prefs.edit().putBoolean("shared_token_mode", v).apply()
     fun measurementIntervalMinutes(): Long = prefs.getLong("measurement_interval", 60L).coerceIn(15L, 24L * 60L)
     fun setMeasurementIntervalMinutes(v: Long) = prefs.edit().putLong("measurement_interval", v.coerceIn(15L, 24L * 60L)).apply()
     fun baseUrl(): String = prefs.getString("base_url", AquaWizApi.GLOBAL_BASE) ?: AquaWizApi.GLOBAL_BASE

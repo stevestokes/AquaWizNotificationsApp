@@ -30,8 +30,11 @@ class MainActivity : Activity() {
     private lateinit var configTabButton: Button
     private var currentSection = "config"
 
+    private lateinit var authMode: Spinner
     private lateinit var username: EditText
     private lateinit var password: EditText
+    private lateinit var accessToken: EditText
+    private lateinit var connectButton: Button
     private lateinit var serial: EditText
     private lateinit var interval: EditText
     private lateinit var region: Spinner
@@ -219,8 +222,22 @@ class MainActivity : Activity() {
         root.addView(textView("Server"))
         root.addView(region, full())
 
+        root.addView(textView("Authentication", 15f))
+        authMode = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                listOf(
+                    "AquaWiz username/password",
+                    "Existing bearer token (experimental)"
+                )
+            )
+        }
+        root.addView(authMode, full())
+
         username = field("AquaWiz username")
         password = field("Password", password = true)
+        accessToken = field("Existing AquaWiz access token", password = true)
         serial = field("Device serial (for example KH1-00-00002)")
         interval = field("Measurement interval in minutes (default 60)").apply {
             inputType = InputType.TYPE_CLASS_NUMBER
@@ -228,6 +245,7 @@ class MainActivity : Activity() {
 
         root.addView(username, full())
         root.addView(password, full())
+        root.addView(accessToken, full())
         root.addView(serial, full())
         root.addView(interval, full())
 
@@ -249,9 +267,16 @@ class MainActivity : Activity() {
         root.addView(deltaPhCheck, full())
         root.addView(doseCheck, full())
 
-        val signIn = Button(this).apply {
+        connectButton = Button(this).apply {
             text = "Sign in & start"
             setOnClickListener { signIn() }
+        }
+
+        authMode.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                updateAuthModeUi()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
         }
         val test = Button(this).apply {
             text = "Test notification"
@@ -279,8 +304,9 @@ class MainActivity : Activity() {
             }
         }
 
-        root.addView(textView("Important: AquaWiz appears to invalidate older sessions when a new login occurs. Signing in here may sign the official AquaWiz app out. Background polling will never auto-login if its token is later rejected.", 12f))
-        root.addView(signIn, full())
+        root.addView(textView("Shared-token test mode never calls AquaWiz /auth. It reuses an existing bearer token from the official app so we can test whether both apps can stay active on one cloud session.", 12f))
+        root.addView(textView("Important: username/password mode creates a new AquaWiz session and may sign the official AquaWiz app out. Background polling never auto-logs in after a rejected token.", 12f))
+        root.addView(connectButton, full())
         root.addView(test, full())
         root.addView(updates, full())
         root.addView(stop, full())
@@ -311,83 +337,125 @@ class MainActivity : Activity() {
         setPadding(dp(12), dp(10), dp(12), dp(10))
     }
 
+    private fun updateAuthModeUi() {
+        if (!::authMode.isInitialized || !::password.isInitialized || !::accessToken.isInitialized) return
+        val shared = authMode.selectedItemPosition == 1
+        password.visibility = if (shared) View.GONE else View.VISIBLE
+        accessToken.visibility = if (shared) View.VISIBLE else View.GONE
+        if (::connectButton.isInitialized) {
+            connectButton.text = if (shared) "Validate shared token & start" else "Sign in & start"
+        }
+    }
+
     private fun selectInitialSection() {
         val session = store.session()
         val configured = session != null &&
             session.username.isNotBlank() &&
-            session.password.isNotBlank() &&
-            !store.selectedDevice().isNullOrBlank()
+            session.accessToken.isNotBlank() &&
+            !store.selectedDevice().isNullOrBlank() &&
+            (store.sharedTokenMode() || session.password.isNotBlank())
 
         showSection(if (configured) "status" else "config")
     }
 
     private fun signIn() {
+        val shared = authMode.selectedItemPosition == 1
         val u = username.text.toString().trim()
         val p = password.text.toString()
+        val token = accessToken.text.toString().trim()
         val typedSerial = serial.text.toString().trim()
 
-        if (u.isBlank() || p.isBlank()) {
+        if (u.isBlank()) {
+            toast("Enter your AquaWiz username")
+            showSection("config")
+            return
+        }
+        if (shared && token.isBlank()) {
+            toast("Paste the existing AquaWiz access token")
+            showSection("config")
+            return
+        }
+        if (shared && typedSerial.isBlank()) {
+            toast("Enter the AquaWiz device serial for shared-token mode")
+            showSection("config")
+            return
+        }
+        if (!shared && p.isBlank()) {
             toast("Enter username and password")
             showSection("config")
             return
         }
 
         saveConfig()
-        store.appendActivity("Signing in to AquaWiz")
+        store.appendActivity(
+            if (shared) "Validating existing AquaWiz bearer token without calling /auth"
+            else "Signing in to AquaWiz with username/password"
+        )
         updateStatus()
 
         Thread {
             try {
                 val api = AquaWizApi(store.baseUrl())
-                val session = api.login(u, p)
-                store.clearMonitoringState()
-                store.setAuthPaused(false)
-                store.saveSession(session)
-                val chosenSerial = typedSerial.ifBlank { session.devices.firstOrNull().orEmpty() }
-
-                if (chosenSerial.isNotBlank()) {
-                    store.setSelectedDevice(chosenSerial)
-                    try {
-                        val baseline = api.latestMeasurement(session, chosenSerial)
-                        store.saveMeasurement(chosenSerial, baseline)
-                        store.setLastFingerprint(baseline.fingerprint)
-                        store.setLastMeasurementEpochMs(baseline.measuredAt.toEpochMilli())
-                        store.setLastKh(baseline.kh)
-                        store.setLastPollEpochMs(System.currentTimeMillis())
-                        store.setLastError(null)
-                        store.appendActivity("Baseline stored in History for " + chosenSerial)
-
-                        PollScheduler.schedule(
-                            this,
-                            PollCadence.nextRun(
-                                Instant.now(),
-                                baseline.measuredAt,
-                                store.measurementIntervalMinutes()
-                            ),
-                        )
-                    } catch (e: Exception) {
-                        store.setLastError("Initial data check: " + (e.message ?: e.javaClass.simpleName))
-                        PollScheduler.start(this, true)
-                    }
+                val session = if (shared) {
+                    Session(
+                        username = u,
+                        password = "",
+                        accessToken = token,
+                        devices = listOf(typedSerial),
+                    )
+                } else {
+                    api.login(u, p)
                 }
 
+                val chosenSerial = typedSerial.ifBlank { session.devices.firstOrNull().orEmpty() }
+                if (chosenSerial.isBlank()) {
+                    throw IllegalArgumentException("Device serial is required")
+                }
+
+                // Shared-token mode deliberately validates the bearer token directly against a
+                // measurement endpoint. It never calls /api/v1/KH/auth.
+                val baseline = api.latestMeasurement(session, chosenSerial)
+
+                store.clearMonitoringState()
+                store.setAuthPaused(false)
+                store.setSharedTokenMode(shared)
+                store.saveSession(session)
+                store.setSelectedDevice(chosenSerial)
+                store.saveMeasurement(chosenSerial, baseline)
+                store.setLastFingerprint(baseline.fingerprint)
+                store.setLastMeasurementEpochMs(baseline.measuredAt.toEpochMilli())
+                store.setLastKh(baseline.kh)
+                store.setLastPollEpochMs(System.currentTimeMillis())
+                store.setLastError(null)
+                store.appendActivity(
+                    if (shared) "Shared token validated; monitoring " + chosenSerial + " without a new AquaWiz login"
+                    else "Signed in; monitoring " + chosenSerial
+                )
+
+                PollScheduler.schedule(
+                    this,
+                    PollCadence.nextRun(
+                        Instant.now(),
+                        baseline.measuredAt,
+                        store.measurementIntervalMinutes()
+                    ),
+                )
+
                 runOnUiThread {
-                    if (typedSerial.isBlank() && chosenSerial.isNotBlank()) serial.setText(chosenSerial)
-                    store.appendActivity(
-                        if (chosenSerial.isBlank()) "Signed in; device serial still required"
-                        else "Signed in; monitoring " + chosenSerial
-                    )
+                    if (typedSerial.isBlank()) serial.setText(chosenSerial)
                     toast(
-                        if (chosenSerial.isBlank()) "Signed in. Enter your device serial."
+                        if (shared) "Shared token works. Monitoring started without /auth."
                         else "Signed in. Monitoring started."
                     )
-                    if (chosenSerial.isNotBlank()) showSection("status") else showSection("config")
+                    showSection("status")
                     updateStatus()
                     updateHistory()
                 }
             } catch (e: Exception) {
-                store.appendActivity("Sign-in failed: " + (e.message ?: e.javaClass.simpleName))
+                val prefix = if (shared) "Shared-token validation failed: " else "Sign-in failed: "
+                store.appendActivity(prefix + (e.message ?: e.javaClass.simpleName))
                 runOnUiThread {
+                    toast(prefix + (e.message ?: e.javaClass.simpleName))
                     showSection("config")
                     updateStatus()
                 }
@@ -400,6 +468,7 @@ class MainActivity : Activity() {
             if (region.selectedItemPosition == 1) AquaWizApi.CHINA_BASE
             else AquaWizApi.GLOBAL_BASE
         )
+        store.setSharedTokenMode(authMode.selectedItemPosition == 1)
         serial.text.toString().trim().takeIf { it.isNotBlank() }?.let(store::setSelectedDevice)
         interval.text.toString().toLongOrNull()?.let(store::setMeasurementIntervalMinutes)
         store.setShowPhOpenAir(phOpenAirCheck.isChecked)
@@ -409,14 +478,17 @@ class MainActivity : Activity() {
 
     private fun populate() {
         val session = store.session()
+        authMode.setSelection(if (store.sharedTokenMode()) 1 else 0)
         username.setText(session?.username.orEmpty())
         password.setText(session?.password.orEmpty())
+        accessToken.setText(if (store.sharedTokenMode()) session?.accessToken.orEmpty() else "")
         serial.setText(store.selectedDevice() ?: session?.devices?.firstOrNull().orEmpty())
         interval.setText(store.measurementIntervalMinutes().toString())
         region.setSelection(if (store.baseUrl().contains(".cn")) 1 else 0)
         phOpenAirCheck.isChecked = store.showPhOpenAir()
         deltaPhCheck.isChecked = store.showDeltaPh()
         doseCheck.isChecked = store.showDoseMl()
+        updateAuthModeUi()
         updateStatus()
         updateHistory()
     }
@@ -435,7 +507,8 @@ class MainActivity : Activity() {
         store.lastUpdateError()?.let { lines += "Update check: " + it }
         lines += when {
             store.authPaused() -> "Status: monitoring paused (AquaWiz session conflict)"
-            session == null -> "Status: not signed in"
+            session == null -> "Status: not connected"
+            store.sharedTokenMode() -> "Status: connected with shared AquaWiz token as " + session.username
             else -> "Status: signed in as " + session.username
         }
         store.selectedDevice()?.let { lines += "Device: " + it }

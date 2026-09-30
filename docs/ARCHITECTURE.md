@@ -106,6 +106,21 @@ If a selected optional value is unavailable from AquaWiz, it is omitted rather t
 
 Tapping a measurement notification attempts to open the installed official AquaWiz app. The notifier discovers an installed launcher activity whose visible label is `AquaWiz`, excludes its own package, and falls back to AquaWiz Notifier if the official app cannot be found.
 
+## Shared-token authentication
+
+The experimental shared-token path constructs a local `Session` from an existing AquaWiz bearer token instead of calling the login endpoint. The token is validated with `latestMeasurement()` before monitoring starts.
+
+The official AquaWiz bytecode shows that credential login calls:
+
+```text
+POST /api/v1/KH/auth
+{"user":"...","password":"...","token":{"access_token":""}}
+```
+
+and later stores the returned `access_token` inside the app's private `user_token` in Expo SecureStore. Normal API requests read `accessToken` from local auth state and send `Authorization: Bearer <accessToken>`.
+
+This means shared-token mode intentionally bypasses `/auth` entirely. Android sandboxing prevents automatic cross-app reading of the official AquaWiz SecureStore, so the token must currently be supplied manually for the experiment.
+
 ## AquaWiz session-conflict handling
 
 Real-device behavior indicates AquaWiz may invalidate an older token when the same account logs in again. The notifier therefore treats `401`/`403` from measurement polling as a session conflict:
