@@ -55,8 +55,32 @@ class AquaWizAuthContractTest {
         assertEquals(7.3, khOnly.first, 0.00001)
         assertEquals(8.7, khOnly.second, 0.00001)
         val enabled = ChartBounds.calculate(readings, 7.5, 8.5, ChartSeries.values().toSet())
-        assertEquals(-0.4, enabled.first, 0.00001)
-        assertEquals(15.2, enabled.second, 0.00001)
+        assertEquals(5.8, enabled.first, 0.00001)
+        assertEquals(8.7, enabled.second, 0.00001)
+    }
+    @Test fun secondarySeriesCannotDistortTheKhAxis() {
+        val readings = listOf(Measurement(7.5, Instant.EPOCH, deltaPh = -0.3, doseMl = 500.0))
+        assertEquals(ChartBounds.calculate(readings, 8.0, 9.0, setOf(ChartSeries.KH)),
+            ChartBounds.calculate(readings, 8.0, 9.0, ChartSeries.values().toSet()))
+    }
+    @Test fun deltaUsesItsOwnObservedNegativeAndPositiveBounds() {
+        val readings = listOf(Measurement(7.5, Instant.EPOCH, deltaPh = -0.3, doseMl = 500.0),
+            Measurement(8.5, Instant.EPOCH, deltaPh = 0.1))
+        val bounds = ChartBounds.delta(readings)
+        assertEquals(-0.34, bounds.first, 0.00001)
+        assertEquals(0.14, bounds.second, 0.00001)
+    }
+    @Test fun zeroAndMissingSecondaryValuesHaveUsableBounds() {
+        val zero = listOf(Measurement(7.5, Instant.EPOCH, deltaPh = 0.0, doseMl = 0.0))
+        assertEquals(-0.02 to 0.02, ChartBounds.delta(zero))
+        assertTrue(ChartBounds.dose(zero).first < 0.0)
+        assertTrue(ChartBounds.dose(zero).second > 0.0)
+        assertEquals(-0.2 to 0.2, ChartBounds.delta(emptyList()))
+        assertEquals(-0.2 to 0.2, ChartBounds.delta(listOf(Measurement(7.5, Instant.EPOCH, deltaPh = Double.NaN))))
+    }
+    @Test fun doseBoundsDoNotDependOnKhOrDelta() {
+        val readings = listOf(Measurement(90.0, Instant.EPOCH, deltaPh = -10.0, doseMl = 2.0))
+        assertEquals(-0.2 to 2.2, ChartBounds.dose(readings))
     }
     @Test fun ignoresNonFiniteDataWhenScaling() {
         val readings = listOf(Measurement(Double.NaN, Instant.EPOCH), Measurement(8.0, Instant.EPOCH, ph = Double.POSITIVE_INFINITY))

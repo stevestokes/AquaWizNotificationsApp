@@ -23,14 +23,29 @@ object ChartBounds {
         items: List<Measurement>, low: Double?, high: Double?,
         visible: Set<ChartSeries> = setOf(ChartSeries.KH),
     ): Pair<Double, Double> {
-        val values = items.flatMap { m -> visible.mapNotNull { it.value(m) } }
+        val values = items.flatMap { m -> visible.filter { it != ChartSeries.DELTA && it != ChartSeries.DOSE }.mapNotNull { it.value(m) } }
             .filter { it.isFinite() }.toMutableList()
         if (low != null && high != null && low.isFinite() && high.isFinite() && low <= high) {
             values += low
             values += high
         }
-        // Tight, linear bounds retain the target band and every enabled line.
+        // Tight, linear bounds retain the target band and every enabled KH/pH line.
         // Each edge receives only 0.2 padding, rather than fixed empty bands.
         return ((values.minOrNull() ?: 7.0) - 0.2) to ((values.maxOrNull() ?: 9.0) + 0.2)
     }
+    fun delta(items: List<Measurement>): Pair<Double, Double> {
+        val values = items.mapNotNull { it.deltaPh }.filter { it.isFinite() }
+        if (values.isEmpty()) return -0.2 to 0.2
+        val low = values.minOrNull()!!; val high = values.maxOrNull()!!
+        val padding = maxOf(0.02, (high - low) * 0.1)
+        return (low - padding) to (high + padding)
+    }
+    fun dose(items: List<Measurement>): Pair<Double, Double> {
+        val values = items.mapNotNull { it.doseMl }.filter { it.isFinite() }
+        val low = minOf(0.0, values.minOrNull() ?: 0.0)
+        val high = maxOf(0.1, values.maxOrNull() ?: 0.1)
+        val padding = (high - low) * 0.1
+        return (low - padding) to (high + padding)
+    }
+
 }

@@ -287,3 +287,7 @@ Home titles, values, units, and footer rows align consistently. All Home cards s
 ## 0.8.2 Notifications and unit alignment
 
 Measurement notifications use one bold text block, with selected optional fields inline and no manually formatted date. Android shows the time the notification was posted. Each controller/timestamp has a unique notification tag, so new results accumulate as individual notifications until opened or dismissed; repeat delivery of the same reading updates only that reading. Android may group the individual notifications automatically. Home units sit beside their numeric values on the same baseline.
+
+### APK updates
+
+Download `AquaWizNotifier-signed` from a successful push CI run. Installable builds and tagged releases use the same persistent `AQUAWIZ_KEYSTORE_*` secrets (including `AQUAWIZ_KEY_ALIAS` and `AQUAWIZ_KEY_PASSWORD`). Never regenerate or rotate this key for ordinary updates. Android requires the same application ID and signing certificate, plus a non-decreasing version code. The runner-generated debug APKs distributed through v0.8.2 used different keys; switching those installations to the release key requires one final uninstall/install. Uninstalling clears local app data, so reconnect and restore preferences afterward. Future signed updates preserve them. CI intentionally does not distribute debug APKs.

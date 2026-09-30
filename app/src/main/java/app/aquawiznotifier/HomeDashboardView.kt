@@ -102,10 +102,10 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         }
         val ph = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(12), dp(12))
-            phTitle.gravity = Gravity.CENTER_VERTICAL; phTitle.setSingleLine(true)
+            phTitle.gravity = Gravity.CENTER_VERTICAL; phTitle.setSingleLine(true); phTitle.setPadding(dp(12), 0, 0, 0)
             phTitle.setAutoSizeTextTypeUniformWithConfiguration(10, 14, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
             addView(phTitle, fullHeight(26))
-            phValue.gravity = Gravity.CENTER_VERTICAL; phValue.setSingleLine(true)
+            phValue.gravity = Gravity.CENTER_VERTICAL; phValue.setSingleLine(true); phValue.setPadding(dp(12), 0, 0, 0)
             phValue.setAutoSizeTextTypeUniformWithConfiguration(22, 40, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
             addView(phValue, fullHeight(58))
             phStatus.gravity = Gravity.CENTER_VERTICAL; phStatus.setPadding(dp(5), 0, dp(5), 0); phStatus.setSingleLine(true)
@@ -120,10 +120,14 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         row.addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; background = AwUi.surface(context, radius = 24)
             elevation = dp(3).toFloat(); setPadding(dp(12), dp(14), dp(12), dp(14))
-            addView(AwUi.button(context, "Take me to the AW app").apply {
-                textSize = 16f; background = rounded(Color.WHITE, 18f); setPadding(dp(4), 0, dp(4), 0)
+            addView(LinearLayout(context).apply {
+                gravity = Gravity.END
+                addView(settingsIcon("Calibrate"), LinearLayout.LayoutParams(dp(30), dp(30)))
+            }, fullHeight(30))
+            addView(AwUi.button(context, "Calibrate").apply {
+                textSize = 26f; background = rounded(Color.WHITE, 18f); setPadding(dp(4), 0, dp(4), 0)
                 setOnClickListener { openOfficialAquaWiz() }
-            }, fullHeight(88))
+            }, fullHeight(58))
         }, weighted(false))
         root.addView(row, full().apply { bottomMargin = dp(12) })
         val doses = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
@@ -233,11 +237,12 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
             gravity = Gravity.CENTER_VERTICAL; setSingleLine(true)
             setAutoSizeTextTypeUniformWithConfiguration(10, 13, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
         }, LinearLayout.LayoutParams(0, dp(30), 1f))
-        if (title != "Today's Dosing") heading.addView(TextView(context).apply {
-            text = "⚙"; textSize = 18f; gravity = Gravity.CENTER; background = rounded(0xFFF1F1F1.toInt(), 16f)
-            contentDescription = "Open " + title + " settings in AquaWiz"; setOnClickListener { openOfficialAquaWiz() }
-        }, LinearLayout.LayoutParams(dp(30), dp(30)))
+        if (title != "Today's Dosing") heading.addView(settingsIcon(title), LinearLayout.LayoutParams(dp(30), dp(30)))
         addView(heading, fullHeight(30)); addView(valueWithUnit(value, unit, Color.BLACK), fullHeight(58))
+    }
+    private fun settingsIcon(title: String) = TextView(context).apply {
+        text = "⚙"; textSize = 18f; gravity = Gravity.CENTER; background = rounded(0xFFF1F1F1.toInt(), 16f)
+        contentDescription = "Open " + title + " settings in AquaWiz"; setOnClickListener { openOfficialAquaWiz() }
     }
     private fun valueWithUnit(value: TextView, unit: String, color: Int): MeasurementValueView {
         value.gravity = Gravity.CENTER_VERTICAL; value.setSingleLine(true)
@@ -263,7 +268,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
             canvas.drawPath(diagonal, paint); canvas.restore()
             paint.shader = null; paint.color = AwUi.BORDER; paint.style = Paint.Style.STROKE; paint.strokeWidth = dp(2).toFloat()
             val inset = paint.strokeWidth / 2
-            canvas.drawRoundRect(RectF(box.left + inset, box.top + inset, box.right - inset, box.bottom - inset), dp(24).toFloat(), dp(24).toFloat(), paint)
+            canvas.drawRoundRect(RectF(box.left + inset, box.top + inset, box.right - inset, box.bottom - inset), dp(24) - inset, dp(24) - inset, paint)
             paint.style = Paint.Style.FILL
         }
         override fun setAlpha(alpha: Int) { paint.alpha = alpha }

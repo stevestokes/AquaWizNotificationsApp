@@ -11,7 +11,7 @@ import android.widget.TextView
 
 class HistoryAdapter(private val context: Context) : BaseAdapter() {
     private var readings = emptyList<Pair<String, Measurement>>()
-    private data class Row(val date: TextView, val device: TextView, val values: List<TextView>)
+    private data class Row(val date: TextView, val values: List<TextView>)
     fun submit(items: List<Pair<String, Measurement>>) {
         if (readings == items) return
         readings = items
@@ -24,14 +24,13 @@ class HistoryAdapter(private val context: Context) : BaseAdapter() {
     override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
         val row = convertView as? LinearLayout ?: createRow()
         val holder = row.tag as Row
-        val (device, m) = readings[position]
+        val (_, m) = readings[position]
         holder.date.text = AppDates.format(m.measuredAt)
-        holder.device.text = device
         val values = listOf("%.2f".format(m.kh), format(m.ph), format(m.phOpenAir),
             m.deltaPh?.let { "%+.2f".format(it) } ?: "—", format(m.doseMl))
         holder.values.zip(values).forEach { (view, value) -> view.text = value }
         row.setBackgroundColor(if (position % 2 == 0) Color.WHITE else 0xFFEEF4FB.toInt())
-        row.contentDescription = holder.date.text.toString() + ", " + device + ", KH " + values[0] +
+        row.contentDescription = holder.date.text.toString() + ", KH " + values[0] +
             " dKH, pH " + values[1] + ", pH open air " + values[2] + ", delta pH " + values[3] + ", dose " + values[4] + " mL"
         return row
     }
@@ -42,12 +41,7 @@ class HistoryAdapter(private val context: Context) : BaseAdapter() {
             setSingleLine(true)
             setAutoSizeTextTypeUniformWithConfiguration(10, 12, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
         }
-        val device = AwUi.label(context, "", 10f).apply { setTextColor(0xFF65758B.toInt()); gravity = Gravity.END; setSingleLine(true) }
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            addView(date, LinearLayout.LayoutParams(0, dp(22), 1f))
-            addView(device)
-        })
+        addView(date, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(22)))
         val values = mutableListOf<TextView>()
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -65,7 +59,7 @@ class HistoryAdapter(private val context: Context) : BaseAdapter() {
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             }
         })
-        tag = Row(date, device, values)
+        tag = Row(date, values)
     }
     private fun format(value: Double?) = value?.let { "%.2f".format(it) } ?: "—"
     private fun dp(value: Int) = AwUi.dp(context, value)

@@ -1,3 +1,10 @@
+## v0.8.3
+
+- CI downloads are signed release APKs using the permanent repository signing key. Missing signing secrets fail the build instead of distributing a new runner's debug signature. Version code 14 supports upgrades from earlier versions signed with that same key. Existing debug installations need one transition reinstall because their private keys were not retained.
+- Hero and History borders follow parallel inset corner radii. pH title and value move right 12dp, with the health pill untouched. Calibrate and its gear open the official AW app.
+- History omits per-row device IDs while retaining all measurement values.
+- KH/pH use the left scale with target limits and 0.2 padding; ΔpH uses independent observed bounds on the right. Dose uses its own small mL plot sharing the time axis, cursor, zoom and saved line style. Secondary values never distort the KH scale.
+
 # App updates and GitHub Releases
 
 AquaWiz Notifier is distributed outside the Play Store, so application updates are discovered through GitHub Releases.

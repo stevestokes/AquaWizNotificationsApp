@@ -216,13 +216,16 @@ class MainActivity : Activity() {
         historyAdapter = HistoryAdapter(this)
         historyList = ListView(this).apply {
             adapter = historyAdapter; dividerHeight = 0; selector = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
-            background = AwUi.surface(this@MainActivity, radius = 16); clipToOutline = true
-            setPadding(dp(2), dp(2), dp(2), dp(2))
+            background = AwUi.surface(this@MainActivity, radius = 14, border = false); clipToOutline = true
         }
         val empty = AwUi.label(this, "No measurements stored yet.", 15f).apply { setPadding(0, dp(24), 0, 0) }
         root.addView(empty)
         historyList.emptyView = empty
-        root.addView(historyList, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(FrameLayout(this).apply {
+            background = AwUi.surface(this@MainActivity, radius = 16)
+            setPadding(dp(2), dp(2), dp(2), dp(2))
+            addView(historyList, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         return root
     }
 

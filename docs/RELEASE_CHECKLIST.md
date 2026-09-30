@@ -133,3 +133,10 @@ Do not commit or attach:
 - unredacted account/API responses
 - the raw release keystore
 - signing passwords
+
+### v0.8.3 signing and chart checks
+
+- Confirm the CI signed artifact verifies with apksigner and the certificate fingerprint remains unchanged on subsequent builds.
+- Install over a previous release-signed build and confirm login/history/preferences survive; debug-signed builds need a one-time reinstall.
+- Enable all five chart series: KH stays near the target range, ΔpH uses the right axis, and Dose appears in a separate mL strip. Check negative and constant-zero ΔpH, cursor and pinch zoom.
+- Check uniform rounded strokes, pH text shift with the health pill fixed, Calibrate/gear launching AW, and History without per-row IDs.
