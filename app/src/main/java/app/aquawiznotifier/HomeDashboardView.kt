@@ -45,6 +45,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
     private var pointsDevice: String? = null
     @Volatile private var generation = 0
     private var displaySignature: String? = null
+    private var sessionIdentity: Triple<String, String?, String?>? = null
 
     init {
         addView(root, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -52,6 +53,11 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
     }
     fun onShown() { refreshFromLocal(); refreshFromApi() }
     fun refreshFromLocal() {
+        val identity = Triple(store.baseUrl(), store.selectedDevice(), store.session()?.accessToken)
+        if (identity != sessionIdentity) {
+            generation++; inFlight = false; fetchedKey = null; points = emptyList(); pointsDevice = null
+            displaySignature = null; sessionIdentity = identity; chart.resetZoom()
+        }
         val serial = store.selectedDevice().orEmpty()
         val all = store.measurementHistory().filter { it.first.equals(serial, true) }.map { it.second }
         val latest = all.maxByOrNull { it.measuredAt }
