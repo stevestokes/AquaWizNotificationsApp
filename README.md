@@ -18,7 +18,7 @@ Android only. This is a sideloaded APK. On first install, Android may ask you to
 
 ## Screenshots
 
-Device ID suffixes are redacted.
+Account names and device ID suffixes are redacted.
 
 | Home | History |
 |:---:|:---:|
@@ -26,7 +26,7 @@ Device ID suffixes are redacted.
 
 | Config | Notification |
 |:---:|:---:|
-| <img src="docs/screenshots/config.png" alt="Connection and notification settings with the device suffix redacted" width="280"> | <img src="docs/screenshots/notification.png" alt="Bold measurement notification with the device suffix redacted" width="280"> |
+| <img src="docs/screenshots/config.png" alt="Connection and notification settings with the account name and device suffix redacted" width="280"> | <img src="docs/screenshots/notification.png" alt="Bold measurement notification with the device suffix redacted" width="280"> |
 
 ## Features
 
