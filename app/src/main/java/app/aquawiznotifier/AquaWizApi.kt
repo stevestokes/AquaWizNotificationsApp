@@ -95,11 +95,19 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
     }
 
     /** Official app graph route recovered from AquaWiz APK. */
-    fun rawGraph(session: Session, serial: String): String {
-        val since = Instant.now().minusSeconds(8 * 60 * 60).toString()
+    fun rawGraph(session: Session, serial: String): String =
+        rawGraph(session, serial, Instant.now().minusSeconds(8 * 60 * 60))
+
+    fun rawGraph(session: Session, serial: String, since: Instant): String {
         val encodedSerial = URLEncoder.encode(serial.trim().uppercase(), StandardCharsets.UTF_8.toString()).replace("+", "%20")
-        val encodedDate = URLEncoder.encode(since, StandardCharsets.UTF_8.toString())
+        val encodedDate = URLEncoder.encode(since.toString(), StandardCharsets.UTF_8.toString())
         return request("GET", "$baseUrl/api/v1/query/device/$encodedSerial/graph?date=$encodedDate", token = session.accessToken)
+    }
+
+    fun graphMeasurements(session: Session, serial: String, since: Instant): List<Measurement> {
+        val normalizedSerial = serial.trim().uppercase()
+        val raw = rawGraph(session, normalizedSerial, since)
+        return MeasurementJson.graphMeasurements(raw, normalizedSerial)
     }
 
     private fun request(method: String, url: String, token: String? = null, body: String? = null): String {
@@ -157,6 +165,16 @@ object MeasurementJson {
     private val phKeys = listOf("latest_ph1", "latestPh1", "phValue", "ph", "pH")
 
     private data class Candidate(val measurement: Measurement, val serial: String?)
+
+    fun graphMeasurements(raw: String, preferredSerial: String? = null): List<Measurement> {
+        val root = runCatching { JSONTokener(raw).nextValue() }.getOrNull() ?: return emptyList()
+        val found = mutableListOf<Candidate>()
+        extractOfficialGraphRows(root, preferredSerial, found)
+        return found
+            .map { it.measurement }
+            .distinctBy { it.fingerprint }
+            .sortedBy { it.measuredAt }
+    }
 
     fun findLatest(
         raw: String,

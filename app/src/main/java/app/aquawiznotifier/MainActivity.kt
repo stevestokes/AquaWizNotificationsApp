@@ -22,9 +22,11 @@ import java.time.format.DateTimeFormatter
 class MainActivity : Activity() {
     private lateinit var store: SecureStore
 
+    private lateinit var homeSection: HomeDashboardView
     private lateinit var statusSection: View
     private lateinit var historySection: View
     private lateinit var configSection: View
+    private lateinit var homeTabButton: Button
     private lateinit var statusTabButton: Button
     private lateinit var historyTabButton: Button
     private lateinit var configTabButton: Button
@@ -53,6 +55,7 @@ class MainActivity : Activity() {
         override fun run() {
             if (::status.isInitialized) updateStatus()
             if (::historyContainer.isInitialized && currentSection == "history") updateHistory()
+            if (::homeSection.isInitialized && currentSection == "home") homeSection.refreshFromLocal()
             uiHandler.postDelayed(this, 3000L)
         }
     }
@@ -72,6 +75,7 @@ class MainActivity : Activity() {
         super.onResume()
         if (::status.isInitialized) updateStatus()
         if (::historyContainer.isInitialized) updateHistory()
+        if (::homeSection.isInitialized) homeSection.refreshFromLocal()
         uiHandler.removeCallbacks(refreshRunnable)
         uiHandler.postDelayed(refreshRunnable, 3000L)
     }
@@ -102,20 +106,24 @@ class MainActivity : Activity() {
             post { requestApplyInsets() }
         }
 
+        homeTabButton = tabButton("Home") { showSection("home") }
         statusTabButton = tabButton("Status") { showSection("status") }
         historyTabButton = tabButton("History") { showSection("history") }
         configTabButton = tabButton("Config") { showSection("config") }
 
+        tabBar.addView(homeTabButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         tabBar.addView(statusTabButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         tabBar.addView(historyTabButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         tabBar.addView(configTabButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         root.addView(tabBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         val content = FrameLayout(this)
+        homeSection = HomeDashboardView(this, store)
         statusSection = buildStatusSection()
         historySection = buildHistorySection()
         configSection = buildConfigSection()
 
+        content.addView(homeSection, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         content.addView(statusSection, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         content.addView(historySection, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         content.addView(configSection, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -131,14 +139,17 @@ class MainActivity : Activity() {
 
     private fun showSection(section: String) {
         currentSection = section
+        homeSection.visibility = if (section == "home") View.VISIBLE else View.GONE
         statusSection.visibility = if (section == "status") View.VISIBLE else View.GONE
         historySection.visibility = if (section == "history") View.VISIBLE else View.GONE
         configSection.visibility = if (section == "config") View.VISIBLE else View.GONE
 
+        homeTabButton.isEnabled = section != "home"
         statusTabButton.isEnabled = section != "status"
         historyTabButton.isEnabled = section != "history"
         configTabButton.isEnabled = section != "config"
 
+        if (section == "home") homeSection.onShown()
         if (section == "status") updateStatus()
         if (section == "history") updateHistory()
     }
@@ -360,7 +371,7 @@ class MainActivity : Activity() {
             !store.selectedDevice().isNullOrBlank() &&
             (store.authMethod() != 2 || session.password.isNotBlank())
 
-        showSection(if (configured) "status" else "config")
+        showSection(if (configured) "home" else "config")
     }
 
     private fun signIn() {
@@ -438,7 +449,7 @@ class MainActivity : Activity() {
                 finishConnection(session, deviceSerial, baseline, authMethod = if (source == "web") 0 else 1)
                 runOnUiThread {
                     toast("AquaWiz token validated. Monitoring started.")
-                    showSection("status")
+                    showSection("home")
                     updateStatus()
                     updateHistory()
                 }
@@ -470,7 +481,7 @@ class MainActivity : Activity() {
                 finishConnection(session, deviceSerial, baseline, authMethod = 2)
                 runOnUiThread {
                     toast("Signed in. Monitoring started.")
-                    showSection("status")
+                    showSection("home")
                     updateStatus()
                     updateHistory()
                 }

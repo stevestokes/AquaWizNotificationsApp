@@ -121,4 +121,24 @@ class MeasurementJsonTest {
         assertEquals(8.27, result!!.ph!!, 0.0001)
     }
 
+
+    @Test fun graphMeasurementsReturnsFullSortedSeries() {
+        val raw = """
+            {
+              "results": [
+                ["2026-09-29T15:00:00Z", {"field22":9990,"field27":7790,"field28":7900,"field26":0}],
+                ["2026-09-29T11:00:00Z", {"field22":10050,"field27":7730,"field28":7840,"field26":5000}]
+              ]
+            }
+        """.trimIndent()
+
+        val result = MeasurementJson.graphMeasurements(raw, "KH1-00-05117")
+        assertEquals(2, result.size)
+        assertEquals(Instant.parse("2026-09-29T11:00:00Z"), result[0].measuredAt)
+        assertEquals(10.05, result[0].kh, 0.0001)
+        assertEquals(7.73, result[0].ph!!, 0.0001)
+        assertEquals(1.0, result[0].doseMl!!, 0.0001)
+        assertEquals(Instant.parse("2026-09-29T15:00:00Z"), result[1].measuredAt)
+    }
+
 }

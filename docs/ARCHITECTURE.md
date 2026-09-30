@@ -159,15 +159,24 @@ Events include:
 
 `MainActivity` displays this data in a fixed-height independently scrollable text console and automatically scrolls to the bottom after refresh so the newest event remains visible.
 
-## Three-tab UI
+## App navigation
 
-The app has three top-level tabs:
+The app has four top-level sections:
 
+- **Home**: AquaWiz-style summary cards plus interactive chart. It refreshes graph history from AquaWiz for the selected range and merges those points into local storage without altering notification deduplication state.
 - **Status**: live state plus rolling diagnostics/activity. The status console is intentionally slightly shorter than the original single-screen console and auto-scrolls to the latest line.
 - **History**: newest-first local measurement history. Storage is independent of notification display toggles and preserves all available measurement values.
 - **Config**: server/account/device setup, measurement interval, notification detail preferences, test notification, updater controls, and sign-out.
 
-If account/device setup is incomplete, Config is the initial tab. Otherwise Status is the initial tab.
+If account/device setup is incomplete, Config is the initial section. Otherwise Home is the initial section.
+
+## Home chart data flow
+
+Home uses the existing authenticated session and the official graph route with a caller-supplied start timestamp. `AquaWizApi.graphMeasurements()` parses every graph row instead of selecting only the newest one. The result is merged into local History with `SecureStore.saveMeasurements()`.
+
+Range controls request approximately 1 day, 3 days, 1 week, 1 month, or 1 year of history. The Home chart renders KH, pH, and pH(O) on one shared Y axis. Phase 1 scales that axis from observed KH low/high values with 0.5 dKH padding on each side. Explicit KH limits are supported by the chart API but are not populated until the AquaWiz limit-setting fields are mapped.
+
+Opening Home or changing chart ranges never updates `lastFingerprint`, so chart backfill cannot suppress a future measurement notification.
 
 ## Local measurement history
 

@@ -28,7 +28,7 @@ Android only. This is a sideloaded APK. On first install, Android may ask you to
 - Adaptive polling anchored to the controller's actual measurement timestamp.
 - Encrypted AquaWiz credentials/token storage using Android Keystore.
 - Background polling never auto-logs in after an AquaWiz session rejection; monitoring pauses instead to avoid disrupting the official AquaWiz app session.
-- Three-section app UI: **Status**, **History**, and **Config**.
+- Four-section app UI: **Home**, **Status**, **History**, and **Config**.
 - Persistent, auto-scrolling activity/diagnostic log in the Status tab.
 - Local measurement History stores every retrieved measurement and all available values regardless of notification-display settings.
 - Global and China AquaWiz server support.
@@ -138,6 +138,10 @@ See [docs/API_REVERSE_ENGINEERING.md](docs/API_REVERSE_ENGINEERING.md) for the d
 
 ## App sections
 
+### Home
+
+AquaWiz-style dashboard with current KH/pH, dosing summary, a **Take me to the AW app** shortcut, and an interactive KH/pH/pH(O) chart. Range buttons (`1D`, `3D`, `1W`, `1M`, `1Y`) fetch the official AquaWiz graph endpoint using the existing bearer token and merge those points into local History. The Phase 1 chart uses one shared Y axis and scales from the selected range's observed KH minimum/maximum with ±0.5 dKH padding. The chart is already structured to accept AquaWiz KH high/low limits once those settings are mapped.
+
 ### Status
 
 Shows live monitoring state, current version/update state, latest stored measurement, polling schedule, errors, and the rolling activity log. The live status console auto-scrolls to the newest entry.
@@ -148,7 +152,7 @@ Stores measurements locally in newest-first order. History is independent of not
 
 ### Config
 
-Contains AquaWiz login/server/device settings, measurement interval, notification-detail toggles, test notification, update check, and sign-out controls. When required setup is missing, the app opens directly to Config; otherwise it opens to Status.
+Contains AquaWiz login/server/device settings, measurement interval, notification-detail toggles, test notification, update check, and sign-out controls. When required setup is missing, the app opens directly to Config; otherwise it opens to Home.
 
 ## Setup
 
@@ -203,8 +207,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 4
-versionName = "0.4.0"
+versionCode = 10
+versionName = "0.7.0"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -216,7 +220,7 @@ The tagged-release workflow expects these GitHub Actions secrets:
 - `AQUAWIZ_KEY_ALIAS`
 - `AQUAWIZ_KEY_PASSWORD`
 
-A tag such as `v0.4.0` builds a signed release APK and publishes two release assets: `AquaWizNotifier.apk` for the permanent latest-download link and `AquaWizNotifier-v0.4.0.apk` for versioned archives.
+A tag such as `v0.7.0` builds a signed release APK and publishes two release assets: `AquaWizNotifier.apk` for the permanent latest-download link and `AquaWizNotifier-v0.7.0.apk` for versioned archives.
 
 Do not lose the release keystore. If it is lost, existing users cannot install future APKs as normal upgrades.
 
@@ -269,3 +273,8 @@ If possible, please donate **in honor of Kaylee Stokes, Michigan Chapter**.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+
+## 0.7.0 Home dashboard
+
+Phase 1 of the AquaWiz-style Home dashboard adds the summary cards, official-app shortcut, interactive local/API-backed chart, range controls, and shared single Y axis. KH target/high/low settings are not yet mapped from the undocumented AquaWiz API, so the chart currently falls back to observed KH range ±0.5 dKH.

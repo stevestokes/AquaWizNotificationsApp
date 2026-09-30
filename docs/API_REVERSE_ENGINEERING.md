@@ -124,6 +124,10 @@ The response contains a `results` array whose entries are shaped like:
 
 The official client maps these rows into objects with `date` plus transformed graph fields.
 
+## Multi-point graph retrieval
+
+For Home/history charting, the notifier now passes a caller-selected start timestamp to the same graph endpoint and parses the complete `results` array into a sorted list of `Measurement` values. Supported UI windows are 1D, 3D, 1W, 1M, and 1Y. These graph reads use the already stored bearer token and do not perform authentication.
+
 ## KH-series graph field map
 
 The following mappings were recovered from the official client's graph transform and chart/widget code:
@@ -166,8 +170,8 @@ The notifier uses this order:
 4. Use the selected controller serial; never guess between multiple explicitly identified devices.
 5. Reject implausible KH values outside 2–20 dKH.
 6. Use explicit AquaWiz graph mappings instead of generic number guessing where the official mapping is known.
-7. On HTTP 401/403, perform one normal re-login using locally encrypted credentials.
-8. Record API failures in the app activity log and retry later.
+7. On HTTP 401/403, pause monitoring rather than automatically re-authenticating.
+8. Record API failures in the app activity log.
 
 ## Notification data model
 

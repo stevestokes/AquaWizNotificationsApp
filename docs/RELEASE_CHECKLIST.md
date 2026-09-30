@@ -4,14 +4,18 @@ Before publishing a tagged AquaWiz Notifier release:
 
 1. Confirm `versionCode` increased.
 2. Confirm `versionName` matches the intended Git tag.
-   - Example: `versionName = "0.6.0"` -> tag `v0.6.0`.
+   - Example: `versionName = "0.7.0"` -> tag `v0.7.0`.
 3. Run:
    ```bash
    ./scripts/verify.sh
    ```
 4. Confirm CI passes on `main`.
 5. Install the latest build on a real Android device.
-6. Confirm the three tabs appear: **Status**, **History**, **Config**.
+6. Confirm the four sections appear: **Home**, **Status**, **History**, **Config**.
+7. Confirm configured installs open to Home and unconfigured installs open to Config.
+8. Confirm Home shows KH/pH summary cards, dosing cards, and **Take me to the AW app** opens the official app.
+9. Confirm chart ranges 1D/3D/1W/1M/1Y fetch and render available AquaWiz graph data.
+10. Confirm dragging across the chart shows the nearest measurement and the chart uses a single Y axis with KH range ±0.5 dKH fallback padding.
 7. With no saved account/device configuration, confirm the app opens on Config.
 8. With valid saved configuration, confirm the app opens on Status.
 9. Confirm Status contains the live activity console and it auto-scrolls to the newest entry.
@@ -70,14 +74,14 @@ Before publishing a tagged AquaWiz Notifier release:
 27. Confirm the release keystore is backed up securely outside GitHub.
 28. Push the matching version tag:
     ```bash
-    git tag v0.6.0
-    git push origin v0.6.0
+    git tag v0.7.0
+    git push origin v0.7.0
     ```
 29. Confirm the **Tagged APK Release** workflow succeeds.
 30. Confirm the GitHub Release contains both signed APK assets:
     ```text
     AquaWizNotifier.apk
-    AquaWizNotifier-v0.6.0.apk
+    AquaWizNotifier-v0.7.0.apk
     ```
 31. Confirm the README's permanent latest-download URL works:
     ```text

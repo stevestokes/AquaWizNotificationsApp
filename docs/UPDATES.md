@@ -209,3 +209,8 @@ Version `0.6.0` adds an experimental mode for importing an existing AquaWiz bear
 Version `0.6.0` promotes bearer-token authentication to the preferred path and adds an embedded **AquaWiz Web Login**. The official AquaWiz page handles credentials inside a WebView; AquaWiz Notifier captures only the returned bearer token, validates it against the configured controller, encrypts it locally, and starts monitoring. Manual bearer-token entry and direct username/password login remain as fallback options.
 
 Real-device testing confirmed that the official AquaWiz app can remain logged in while AquaWiz Notifier polls with a web-issued bearer token.
+
+
+## 0.7.0 Home dashboard
+
+Version `0.7.0` adds Phase 1 of the AquaWiz-style Home screen: KH/pH summary cards, dosing cards, official AquaWiz app shortcut, interactive graph inspection, range buttons, graph API backfill, and a single shared Y axis. The initial Y-axis fallback uses observed KH min/max with ±0.5 dKH padding until AquaWiz KH limit settings are mapped.

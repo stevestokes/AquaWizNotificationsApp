@@ -139,22 +139,29 @@ class SecureStore(context: Context) {
     fun setShowDoseMl(v: Boolean) = prefs.edit().putBoolean("notify_dose_ml", v).apply()
 
     fun saveMeasurement(serial: String, measurement: Measurement) {
-        val history = runCatching { JSONArray(prefs.getString("measurement_history", "[]") ?: "[]") }.getOrElse { JSONArray() }
-        val fingerprint = measurement.fingerprint
-        for (i in 0 until history.length()) {
-            val existing = history.optJSONObject(i) ?: continue
-            if (existing.optString("serial") == serial && existing.optString("fingerprint") == fingerprint) {
-                saveLatestMeasurement(serial, measurement)
-                return
-            }
+        saveMeasurements(serial, listOf(measurement))
+    }
+
+    fun saveMeasurements(serial: String, measurements: List<Measurement>) {
+        if (measurements.isEmpty()) return
+
+        val merged = buildList<Pair<String, Measurement>> {
+            measurements.forEach { add(serial to it) }
+            addAll(measurementHistory())
         }
+            .distinctBy { (deviceSerial, measurement) -> deviceSerial + "|" + measurement.fingerprint }
+            .sortedByDescending { (_, measurement) -> measurement.measuredAt }
+            .take(2000)
 
         val updated = JSONArray()
-        updated.put(measurementJson(serial, measurement))
-        val keep = minOf(history.length(), 1999)
-        for (i in 0 until keep) updated.put(history.opt(i))
+        merged.forEach { (deviceSerial, measurement) ->
+            updated.put(measurementJson(deviceSerial, measurement))
+        }
         prefs.edit().putString("measurement_history", updated.toString()).apply()
-        saveLatestMeasurement(serial, measurement)
+
+        merged.firstOrNull()?.let { (deviceSerial, measurement) ->
+            saveLatestMeasurement(deviceSerial, measurement)
+        }
     }
 
     fun measurementHistory(): List<Pair<String, Measurement>> {
