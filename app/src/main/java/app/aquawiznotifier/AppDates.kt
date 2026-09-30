@@ -7,13 +7,17 @@ import java.util.Locale
 
 object AppDates {
     val formatter: DateTimeFormatter
-        get() = DateTimeFormatter.ofPattern("MM/dd/yy '@' HH:mm", Locale.US).withZone(ZoneId.systemDefault())
+        get() = DateTimeFormatter.ofPattern("MM/dd/yy '@' hh:mm a", Locale.US).withZone(ZoneId.systemDefault())
     fun format(instant: Instant): String = formatter.format(instant)
     fun normalizeActivityLog(log: String): String = log.lineSequence().joinToString("\n") { line ->
         val close = line.indexOf(']')
         if (!line.startsWith("[") || close < 0) line else {
             val old = line.substring(1, close)
-            val converted = listOf("MMM d, h:mm:ss a", "MMM d, h:mm a").firstNotNullOfOrNull { pattern ->
+            val converted = runCatching {
+                val parsed = java.time.LocalDateTime.parse(old,
+                    DateTimeFormatter.ofPattern("MM/dd/yy '@' HH:mm", Locale.US))
+                format(parsed.atZone(ZoneId.systemDefault()).toInstant())
+            }.getOrNull() ?: listOf("MMM d, h:mm:ss a", "MMM d, h:mm a").firstNotNullOfOrNull { pattern ->
                 runCatching {
                     val zone = ZoneId.systemDefault()
                     val now = java.time.LocalDateTime.now(zone)

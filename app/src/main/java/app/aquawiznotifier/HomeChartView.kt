@@ -71,9 +71,17 @@ class HomeChartView(context: Context) : View(context) {
         val left = dp(44f); val right = width - dp(8f)
         val top = dp(12f); val bottom = height - dp(42f)
         if (right <= left || bottom <= top) return
-        val (yMin, yMax) = ChartBounds.calculate(items, limits.first, limits.second)
+        val window = if (items.isEmpty()) null else timeWindow()
+        val inView = if (window == null) items else items.filterIndexed { index, m ->
+            val time = m.measuredAt.toEpochMilli()
+            // Include the adjoining endpoints of segments crossing a zoom edge.
+            time in window.first..window.second ||
+                (index < items.lastIndex && time < window.first && items[index + 1].measuredAt.toEpochMilli() >= window.first) ||
+                (index > 0 && time > window.second && items[index - 1].measuredAt.toEpochMilli() <= window.second)
+        }
+        val (yMin, yMax) = ChartBounds.calculate(inView, limits.first, limits.second, visible)
         fun y(value: Double) = bottom - (bottom - top) * ((value - yMin) / (yMax - yMin)).toFloat()
-        limits.first?.let { low -> limits.second?.let { high ->
+        limits.first?.takeIf { it.isFinite() }?.let { low -> limits.second?.takeIf { it.isFinite() && it >= low }?.let { high ->
             canvas.drawRect(left, y(high), right, y(low), bandPaint)
             canvas.drawLine(left, y(low), right, y(low), limitPaint)
             canvas.drawLine(left, y(high), right, y(high), limitPaint)

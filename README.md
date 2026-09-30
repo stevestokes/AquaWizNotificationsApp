@@ -41,7 +41,7 @@ Android only. This is a sideloaded APK. On first install, Android may ask you to
 
 ## AquaWiz Web Login and bearer-token authentication
 
-Version 0.8.0 uses **AquaWiz Web Login** as the only authentication path, opening it automatically when no session is saved. Real-device testing confirmed that AquaWiz Notifier can poll with a web-issued AquaWiz bearer token while the official AquaWiz mobile app remains logged in and functional.
+Version 0.8.1 uses **AquaWiz Web Login** as the only authentication path, opening it automatically when no session is saved. Real-device testing confirmed that AquaWiz Notifier can poll with a web-issued AquaWiz bearer token while the official AquaWiz mobile app remains logged in and functional.
 
 The flow opens the official AquaWiz website inside an in-app WebView. AquaWiz itself handles the username/password form. AquaWiz Notifier captures only the returned `access_token`, validates it by reading the latest measurement, stores it encrypted with Android Keystore, and then polls normally.
 
@@ -142,7 +142,7 @@ See [docs/API_REVERSE_ENGINEERING.md](docs/API_REVERSE_ENGINEERING.md) for the d
 
 ### Home
 
-AquaWiz-style dashboard with current KH/pH, dosing summary, a **Take me to the AW app** shortcut, and an interactive KH/pH/pH(O) chart. Range buttons (`1D`, `3D`, `1W`, `1M`, `1Y`) fetch the official AquaWiz graph endpoint using the existing bearer token and merge those points into local History. The chart uses a single Y axis with configured target ± alert deviation and ±0.5 dKH outer padding; missing limits fall back to observed KH. Toggle KH, pH, pH(O), ΔpH, and Dose independently. Long press a legend item for solid, dashed, or dotted lines. Visibility, styles, and the selected range are saved locally. Drag to inspect, pinch to zoom, and double tap to reset.
+AquaWiz-style dashboard with current KH/pH, dosing summary, a **Take me to the AW app** shortcut, and an interactive KH/pH/pH(O) chart. Range buttons (`1D`, `3D`, `1W`, `1M`, `1Y`) fetch the official AquaWiz graph endpoint using the existing bearer token and merge those points into local History. The chart uses a single Y axis with tight bounds around the target range and every enabled data line, with 0.2 outer padding. Toggle KH, pH, pH(O), ΔpH, and Dose independently. Long press a legend item for solid, dashed, or dotted lines. Visibility, styles, and the selected range are saved locally. Drag to inspect, pinch to zoom, and double tap to reset.
 
 ### Status
 
@@ -150,7 +150,7 @@ Shows live monitoring state, current version/update state, latest stored measure
 
 ### History
 
-Displays compact newest-first rows; tap a row for all measurement details. Measurements are stored locally. History is independent of notification configuration: dKH, pH, pH(O), ΔpH, Dose, device serial, and measurement timestamp are retained whenever those values are available from AquaWiz. The initial baseline reading is stored in History even though it intentionally does not produce a notification.
+Displays alternating newest-first rows with KH, pH, pH(O), ΔpH, and Dose directly visible. Measurements are stored locally. History is independent of notification configuration: dKH, pH, pH(O), ΔpH, Dose, device serial, and measurement timestamp are retained whenever those values are available from AquaWiz. The initial baseline reading is stored in History even though it intentionally does not produce a notification.
 
 ### Config
 
@@ -209,8 +209,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 11
-versionName = "0.8.0"
+versionCode = 12
+versionName = "0.8.1"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -222,7 +222,7 @@ The tagged-release workflow expects these GitHub Actions secrets:
 - `AQUAWIZ_KEY_ALIAS`
 - `AQUAWIZ_KEY_PASSWORD`
 
-A tag such as `v0.8.0` builds a signed release APK and publishes two release assets: `AquaWizNotifier.apk` for the permanent latest-download link and `AquaWizNotifier-v0.8.0.apk` for versioned archives.
+A tag such as `v0.8.1` builds a signed release APK and publishes two release assets: `AquaWizNotifier.apk` for the permanent latest-download link and `AquaWizNotifier-v0.8.1.apk` for versioned archives.
 
 Do not lose the release keystore. If it is lost, existing users cannot install future APKs as normal upgrades.
 
@@ -279,4 +279,8 @@ MIT. See [LICENSE](LICENSE).
 
 ## 0.8.0 Home and chart update
 
-Home follows the official AquaWiz diagonal summary card, rounded tiles, and Plus Jakarta Sans fonts. Current device settings supply the KH target, probe state, and remaining solution. History is compact, chart preferences persist locally, and all displayed dates use `MM/dd/yy @ HH:mm` in the device timezone.
+Home follows the official AquaWiz diagonal summary card, rounded tiles, and Plus Jakarta Sans fonts. Current device settings supply the KH target, probe state, and remaining solution. History is compact, chart preferences persist locally, and all displayed dates use `MM/dd/yy @ hh:mm AM/PM` in the device timezone.
+
+## 0.8.1 Layout polish
+
+Home titles, values, units, and footer rows align consistently. All Home cards share a darker 2dp border. Graph range controls use rounded selection buttons, while tight 0.2-padded bounds keep target limits and enabled lines visible, including readings outside the target range. History shows all five values in alternating rows without a detail dialog. Config groups connection state, notification toggles, and app actions; connection editors expand when needed. Tab order is Home, History, Status, Config.

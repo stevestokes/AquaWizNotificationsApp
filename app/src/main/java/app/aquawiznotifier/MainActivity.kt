@@ -43,6 +43,9 @@ class MainActivity : Activity() {
 
     private lateinit var status: TextView
     private lateinit var historyList: ListView
+    private lateinit var historySummary: TextView
+    private lateinit var connectionState: TextView
+    private lateinit var connectionDetails: TextView
     private lateinit var historyAdapter: HistoryAdapter
     private var connecting = false
     private var webLoginOpen = false
@@ -119,10 +122,10 @@ class MainActivity : Activity() {
         historyTabButton = tabButton("History") { showSection("history") }
         configTabButton = tabButton("Config") { showSection("config") }
 
-        tabBar.addView(homeTabButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        tabBar.addView(statusTabButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        tabBar.addView(historyTabButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        tabBar.addView(configTabButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        tabBar.addView(homeTabButton, tabLayout())
+        tabBar.addView(historyTabButton, tabLayout())
+        tabBar.addView(statusTabButton, tabLayout())
+        tabBar.addView(configTabButton, tabLayout())
         root.addView(tabBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         val content = FrameLayout(this)
@@ -140,8 +143,10 @@ class MainActivity : Activity() {
         return root
     }
 
-    private fun tabButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label
+    private fun tabLayout() = LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(dp(2), 0, dp(2), 0) }
+
+    private fun tabButton(label: String, action: () -> Unit) = AwUi.button(this, label).apply {
+        textSize = 12f; setPadding(0, 0, 0, 0)
         setOnClickListener { action() }
     }
 
@@ -157,6 +162,9 @@ class MainActivity : Activity() {
         historyTabButton.isEnabled = section != "history"
         configTabButton.isEnabled = section != "config"
 
+        listOf(homeTabButton to "home", historyTabButton to "history", statusTabButton to "status", configTabButton to "config")
+            .forEach { (button, name) -> AwUi.styleButton(button, name == section) }
+        if (section == "config") updateConnectionState()
         if (section == "home") homeSection.onShown()
         if (section == "status") updateStatus()
         if (section == "history") updateHistory()
@@ -201,27 +209,17 @@ class MainActivity : Activity() {
     }
 
     private fun buildHistorySection(): View {
-        val root = verticalRoot()
-        root.addView(textView("History", 24f))
-        root.addView(textView("Tap a reading for all values", 13f))
+        val root = verticalRoot().apply { setBackgroundColor(0xFFF2F4F7.toInt()) }
+        root.addView(AwUi.label(this, "History", 24f, true), full())
+        historySummary = AwUi.label(this, "", 12f).apply { setTextColor(0xFF65758B.toInt()) }
+        root.addView(historySummary, full().apply { bottomMargin = dp(12) })
         historyAdapter = HistoryAdapter(this)
         historyList = ListView(this).apply {
-            adapter = historyAdapter
-            dividerHeight = dp(1)
-            setOnItemClickListener { _, _, position, _ ->
-                val (device, m) = historyAdapter.reading(position)
-                android.app.AlertDialog.Builder(this@MainActivity)
-                    .setTitle(AppDates.format(m.measuredAt))
-                    .setMessage(buildString {
-                        append(device + "\nKH: %.3f dKH".format(m.kh))
-                        append("\npH: " + (m.ph?.let { "%.3f".format(it) } ?: "—"))
-                        append("\npH(O): " + (m.phOpenAir?.let { "%.3f".format(it) } ?: "—"))
-                        append("\nΔpH: " + (m.deltaPh?.let { "%+.3f".format(it) } ?: "—"))
-                        append("\nDose: " + (m.doseMl?.let { "%.2f mL".format(it) } ?: "—"))
-                    }).setPositiveButton("Close", null).show()
-            }
+            adapter = historyAdapter; dividerHeight = 0; selector = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
+            background = AwUi.surface(this@MainActivity, radius = 16); clipToOutline = true
+            setPadding(dp(2), dp(2), dp(2), dp(2))
         }
-        val empty = textView("No measurements stored yet.", 15f)
+        val empty = AwUi.label(this, "No measurements stored yet.", 15f).apply { setPadding(0, dp(24), 0, 0) }
         root.addView(empty)
         historyList.emptyView = empty
         root.addView(historyList, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -230,111 +228,95 @@ class MainActivity : Activity() {
 
     private fun buildConfigSection(): View {
         val scroll = ScrollView(this)
-        val root = verticalRoot()
+        val root = verticalRoot().apply { setBackgroundColor(0xFFF2F4F7.toInt()) }
         scroll.addView(root)
+        root.addView(AwUi.label(this, "Config", 24f, true), full().apply { bottomMargin = dp(12) })
 
-        root.addView(textView("AquaWiz Notifier", 26f))
-
-        val github = textView("GitHub: https://github.com/stevestokes/AquaWizNotificationsApp", 13f).apply {
-            autoLinkMask = Linkify.WEB_URLS
-            movementMethod = LinkMovementMethod.getInstance()
-            linksClickable = true
-        }
-        root.addView(github)
-
-        val author = textView("Made by Biff0rz • Reef2Reef: https://www.reef2reef.com/members/biff0rz.154703/", 13f).apply {
-            autoLinkMask = Linkify.WEB_URLS
-            movementMethod = LinkMovementMethod.getInstance()
-            linksClickable = true
-        }
-        root.addView(author)
-
-        root.addView(textView("Configuration", 20f))
-        root.addView(textView("AquaWiz account, controller, polling and notification settings.", 14f))
+        val account = sectionCard("AquaWiz connection")
+        connectionState = AwUi.label(this, "", 16f, true)
+        connectionDetails = AwUi.label(this, "", 12f).apply { setTextColor(0xFF65758B.toInt()); setLineSpacing(dp(4).toFloat(), 1f) }
+        account.addView(connectionState, full())
+        account.addView(connectionDetails, full())
+        connectButton = AwUi.button(this, "Open AquaWiz Web Login", true).apply { setOnClickListener { signIn() } }
+        account.addView(connectButton, full())
 
         region = Spinner(this).apply {
-            adapter = ArrayAdapter(
-                this@MainActivity,
-                android.R.layout.simple_spinner_dropdown_item,
-                listOf("Global (server.aquawiz.net)", "China (server.aquawiz.cn)")
-            )
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+                listOf("Global (server.aquawiz.net)", "China (server.aquawiz.cn)"))
         }
-        root.addView(textView("Server"))
-        root.addView(region, full())
+        username = field("AquaWiz username")
+        serial = field("Controller serial")
+        interval = field("Measurement interval in minutes").apply { inputType = InputType.TYPE_CLASS_NUMBER }
+        val settings = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; visibility = View.GONE
+            addView(AwUi.label(this@MainActivity, "Server", 12f), full()); addView(region, full())
+            addView(AwUi.label(this@MainActivity, "Account", 12f), full()); addView(username, full())
+            addView(AwUi.label(this@MainActivity, "Controller", 12f), full()); addView(serial, full())
+            addView(AwUi.label(this@MainActivity, "Measurement interval (minutes)", 12f), full()); addView(interval, full())
+            addView(AwUi.button(this@MainActivity, "Save connection settings").apply {
+                setOnClickListener {
+                    saveConfig(); settingsVisible(false); updateConnectionState(); toast("Connection settings saved")
+                }
+            }, full())
+        }
+        // Keep connection editors available without crowding everyday configuration.
+        connectionEditors = settings
+        account.addView(AwUi.button(this, "Connection settings").apply {
+            setOnClickListener { settingsVisible(settings.visibility != View.VISIBLE) }
+        }, full())
+        account.addView(settings, full())
+        root.addView(account, full().apply { bottomMargin = dp(12) })
 
-        root.addView(textView("Authentication", 15f))
-        username = field("AquaWiz username (if not returned by Web Login)")
-        serial = field("Device serial (for example KH1-00-00002)")
-        interval = field("Measurement interval in minutes (default 60)").apply {
-            inputType = InputType.TYPE_CLASS_NUMBER
-        }
+        val notifications = sectionCard("Notification details")
+        notifications.addView(AwUi.label(this, "KH and pH are always included. Choose additional values.", 12f), full())
+        phOpenAirCheck = notificationToggle("pH(O) · fully aerated pH") { store.setShowPhOpenAir(it) }
+        deltaPhCheck = notificationToggle("ΔpH · pH difference") { store.setShowDeltaPh(it) }
+        doseCheck = notificationToggle("Dose · mL") { store.setShowDoseMl(it) }
+        notifications.addView(phOpenAirCheck, full()); notifications.addView(deltaPhCheck, full()); notifications.addView(doseCheck, full())
+        notifications.addView(AwUi.button(this, "Test notification").apply { setOnClickListener { Notifier.test(this@MainActivity) } }, full())
+        root.addView(notifications, full().apply { bottomMargin = dp(12) })
 
-        root.addView(username, full())
-        root.addView(serial, full())
-        root.addView(interval, full())
-
-        root.addView(textView("Notification details", 15f))
-        phOpenAirCheck = CheckBox(this).apply {
-            text = "Show pH(O)"
-            setOnCheckedChangeListener { _, checked -> store.setShowPhOpenAir(checked) }
-        }
-        deltaPhCheck = CheckBox(this).apply {
-            text = "Show ΔpH"
-            setOnCheckedChangeListener { _, checked -> store.setShowDeltaPh(checked) }
-        }
-        doseCheck = CheckBox(this).apply {
-            text = "Show Dose (mL)"
-            setOnCheckedChangeListener { _, checked -> store.setShowDoseMl(checked) }
-        }
-
-        root.addView(phOpenAirCheck, full())
-        root.addView(deltaPhCheck, full())
-        root.addView(doseCheck, full())
-
-        connectButton = Button(this).apply {
-            text = "Open AquaWiz Web Login"
-            setOnClickListener { signIn() }
-        }
-
-        val test = Button(this).apply {
-            text = "Test notification"
-            setOnClickListener { Notifier.test(this@MainActivity) }
-        }
-        val updates = Button(this).apply {
-            text = "Check for updates"
-            setOnClickListener {
-                store.appendActivity("Manual update check queued")
-                UpdateChecker.checkNow(this@MainActivity)
-                toast("Update check queued")
-                updateStatus()
-            }
-        }
-        val stop = Button(this).apply {
-            text = "Stop & disconnect"
+        val actions = sectionCard("App")
+        actions.addView(AwUi.label(this, "Version " + BuildConfig.VERSION_NAME, 12f), full())
+        actions.addView(AwUi.button(this, "Check for updates").apply {
+            setOnClickListener { store.appendActivity("Manual update check queued"); UpdateChecker.checkNow(this@MainActivity); toast("Update check queued"); updateStatus() }
+        }, full())
+        actions.addView(AwUi.button(this, "Stop & disconnect").apply {
+            setTextColor(0xFFB64242.toInt())
             setOnClickListener {
                 store.appendActivity("Monitoring stopped and notifier session cleared")
-                PollScheduler.cancel(this@MainActivity)
-                store.clearSession()
-                store.clearMonitoringState()
-                toast("Stopped")
-                showSection("config")
-                updateStatus()
+                PollScheduler.cancel(this@MainActivity); store.clearSession(); store.clearMonitoringState()
+                toast("Stopped"); showSection("config"); updateStatus()
             }
-        }
-
-        root.addView(textView("Use AquaWiz Web Login. The official AquaWiz page handles your credentials and the notifier captures only the returned bearer token. This avoids notifier-side credential login.", 12f))
-
-        root.addView(connectButton, full())
-        root.addView(test, full())
-        root.addView(updates, full())
-        root.addView(stop, full())
-        root.addView(
-            textView(
-                "Test notification uses the most recent stored AquaWiz measurement when available. Before the first real reading, it uses a normal sample value.",
-                12f
-            )
-        )
+        }, full())
+        root.addView(actions, full())
+        root.addView(textView("Made by Biff0rz · Reef2Reef: https://www.reef2reef.com/members/biff0rz.154703/", 11f).apply {
+            autoLinkMask = Linkify.WEB_URLS; movementMethod = LinkMovementMethod.getInstance(); linksClickable = true
+        }, full())
+        root.addView(textView("GitHub: https://github.com/stevestokes/AquaWizNotificationsApp", 11f).apply {
+            autoLinkMask = Linkify.WEB_URLS; movementMethod = LinkMovementMethod.getInstance(); linksClickable = true
+        }, full())
         return scroll
+    }
+    private lateinit var connectionEditors: LinearLayout
+    private fun settingsVisible(visible: Boolean) { connectionEditors.visibility = if (visible) View.VISIBLE else View.GONE }
+    private fun sectionCard(title: String) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL; background = AwUi.surface(this@MainActivity)
+        setPadding(dp(16), dp(16), dp(16), dp(16))
+        addView(AwUi.label(this@MainActivity, title, 17f, true), full().apply { topMargin = 0; bottomMargin = dp(6) })
+    }
+    private fun notificationToggle(title: String, changed: (Boolean) -> Unit) = CheckBox(this).apply {
+        text = title; textSize = 14f; typeface = resources.getFont(R.font.aw_regular)
+        setTextColor(AwUi.INK); buttonTintList = android.content.res.ColorStateList.valueOf(AwUi.BLUE)
+        setOnCheckedChangeListener { _, checked -> changed(checked) }
+    }
+    private fun updateConnectionState() {
+        if (!::connectionState.isInitialized) return
+        val session = store.session()
+        connectionState.text = when { store.authPaused() -> "Session expired · reconnect"; session == null -> "Not connected"; else -> "Connected" }
+        connectionState.setTextColor(if (session != null && !store.authPaused()) 0xFF26985A.toInt() else AwUi.INK)
+        connectionDetails.text = listOfNotNull(session?.username, store.selectedDevice(),
+            if (store.baseUrl().contains(".cn")) "China server" else "Global server").joinToString(" · ")
     }
 
     private fun verticalRoot() = LinearLayout(this).apply {
@@ -499,6 +481,7 @@ class MainActivity : Activity() {
     }
 
     private fun updateStatus() {
+        updateConnectionState()
         if (!::status.isInitialized) return
 
         val session = store.session()
@@ -556,7 +539,11 @@ class MainActivity : Activity() {
     }
 
     private fun updateHistory() {
-        if (::historyAdapter.isInitialized) historyAdapter.submit(store.measurementHistory())
+        if (::historyAdapter.isInitialized) {
+            val readings = store.measurementHistory()
+            historyAdapter.submit(readings)
+            historySummary.text = readings.size.toString() + " readings · Newest first"
+        }
     }
 
     private fun requestNotifications() {

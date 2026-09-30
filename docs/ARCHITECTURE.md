@@ -174,7 +174,7 @@ No saved session opens Web Login automatically. Valid configured sessions open H
 
 Home uses the existing authenticated session and the official graph route with a caller-supplied start timestamp. `AquaWizApi.graphMeasurements()` parses every graph row instead of selecting only the newest one. The result is merged into local History with `SecureStore.saveMeasurements()`.
 
-Range controls request approximately 1 day, 3 days, 1 week, 1 month, or 1 year of history. KH, pH, pH(O), ΔpH, and Dose can be toggled independently on one shared Y axis. DeviceSummaryJson maps field8/1000 to the target and field15/1000 to the alert deviation; bounds are target ± deviation with another 0.5 dKH on each side. Missing limits fall back to observed KH. SharedPreferences retain line visibility, line style, and range. Dragging inspects points, pinching zooms time, and double tapping resets. Device summary also maps latest_ph probe state and field14/field16 solution levels.
+Range controls request approximately 1 day, 3 days, 1 week, 1 month, or 1 year of history. KH, pH, pH(O), ΔpH, and Dose can be toggled independently on one shared Y axis. DeviceSummaryJson maps field8/1000 to the target and field15/1000 to the alert deviation; bounds are target ± deviation and join every enabled line value to determine tight Y bounds, with 0.2 padding on each side. Missing limits fall back to visible data. SharedPreferences retain line visibility, line style, and range. Dragging inspects points, pinching zooms time, and double tapping resets. Device summary also maps latest_ph probe state and field14/field16 solution levels.
 
 Opening Home or changing chart ranges never updates `lastFingerprint`, so chart backfill cannot suppress a future measurement notification.
 

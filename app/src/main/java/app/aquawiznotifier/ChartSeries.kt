@@ -19,9 +19,18 @@ enum class ChartSeries(val label: String, val color: Int, val defaultVisible: Bo
 enum class ChartLineStyle { SOLID, DASHED, DOTTED }
 
 object ChartBounds {
-    fun calculate(items: List<Measurement>, low: Double?, high: Double?): Pair<Double, Double> {
-        if (low != null && high != null && low.isFinite() && high.isFinite() && low <= high) return (low - 0.5) to (high + 0.5)
-        val values = items.map { it.kh }.filter { it.isFinite() }
-        return ((values.minOrNull() ?: 7.0) - 0.5) to ((values.maxOrNull() ?: 9.0) + 0.5)
+    fun calculate(
+        items: List<Measurement>, low: Double?, high: Double?,
+        visible: Set<ChartSeries> = setOf(ChartSeries.KH),
+    ): Pair<Double, Double> {
+        val values = items.flatMap { m -> visible.mapNotNull { it.value(m) } }
+            .filter { it.isFinite() }.toMutableList()
+        if (low != null && high != null && low.isFinite() && high.isFinite() && low <= high) {
+            values += low
+            values += high
+        }
+        // Tight, linear bounds retain the target band and every enabled line.
+        // Each edge receives only 0.2 padding, rather than fixed empty bands.
+        return ((values.minOrNull() ?: 7.0) - 0.2) to ((values.maxOrNull() ?: 9.0) + 0.2)
     }
 }

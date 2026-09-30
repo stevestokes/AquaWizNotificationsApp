@@ -227,3 +227,15 @@ Version `0.7.0` adds Phase 1 of the AquaWiz-style Home screen: KH/pH summary car
 - Corrected dose scaling for small raw graph doses.
 
 Validation: unit tests cover settings isolation/scaling, chart bounds, current and graph measurement scaling, history merging, and date formatting. Live login, notification delivery, and pixel-level Home parity still require a physical Android device.
+
+## 0.8.1 Layout and adaptive chart update
+
+- Shared title/value/footer heights align the diagonal hero; numeric values and units share baselines.
+- All Home cards use a uniform darker 2dp border; rounded range selectors show an explicit selected state.
+- Y bounds include the target limits and all enabled line values, with 0.2 padding per edge. Zoom recalculates bounds for visible data and adjoining segments. Hidden lines do not add empty space.
+- All dates display MM/dd/yy @ hh:mm AM/PM, including previous activity entries.
+- History displays every measurement value inline with alternating row colors; the tap-through prompt/dialog is removed.
+- Config separates connection status, notification details, and app actions. Connection editors are collapsed by default.
+- Tab order: Home, History, Status, Config.
+
+Validation: bounds tests cover below/above-target readings, enabled versus hidden lines, nonfinite values, and 0.2 padding; date tests cover midnight/noon/afternoon and old log timestamps.
