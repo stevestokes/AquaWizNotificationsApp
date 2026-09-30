@@ -1,0 +1,231 @@
+# AquaWiz API reverse-engineering notes
+
+These notes are derived from static analysis of the publicly distributed AquaWiz Android APK used for this project, plus real-device validation while building AquaWiz Notifier.
+
+This is an unofficial integration and is not affiliated with or endorsed by AquaWiz.
+
+## Client format
+
+The official AquaWiz Android app is a React Native / Expo application compiled to Hermes bytecode version 96. Hermes v96 uses the same opcode set as v95 for the relevant instructions, which allows the network request construction and graph-field transforms to be recovered directly.
+
+## API servers
+
+- Global: `https://server.aquawiz.net`
+- China: `https://server.aquawiz.cn`
+
+## Authentication
+
+The official app sends:
+
+```http
+POST /api/v1/KH/auth
+Content-Type: application/json
+
+{
+  "user": "<username>",
+  "password": "<password>",
+  "token": {
+    "access_token": ""
+  }
+}
+```
+
+### Important correction
+
+An earlier prototype incorrectly sent:
+
+```json
+{"username":"...","password":"..."}
+```
+
+The AquaWiz server responded with:
+
+```text
+400 User not found
+```
+
+Tracing the Hermes bytecode showed that the real field name is `user`, and that the official client includes an initially empty nested token object.
+
+The successful response exposes an `access_token`. Authenticated calls use:
+
+```http
+Authorization: Bearer <access_token>
+```
+
+The official app distinguishes at least these authentication errors:
+
+- `User not found`
+- `Wrong password`
+
+## Device current-data request
+
+The official app constructs:
+
+```http
+POST /api/v1/KH/{DEVICE_SERIAL}/all_field
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "user": "<username>",
+  "token": {
+    "access_token": "<access_token>"
+  }
+}
+```
+
+### Important correction
+
+An earlier prototype incorrectly used the username in the path:
+
+```text
+/api/v1/KH/{username}/all_field
+```
+
+A real AquaWiz account returned:
+
+```text
+400 User not owned
+```
+
+Re-tracing the official app showed that the path parameter is the **device serial**, while the username remains inside the JSON body.
+
+## Current-value fields
+
+The official device page reads:
+
+- `latest_kh`
+- `latest_ph`
+- `latest_ph1`
+- `latest_time`
+
+The important pH distinction is:
+
+- `latest_ph` = pH probe/status value
+- `latest_ph1` = displayed tank pH value
+
+AquaWiz Notifier therefore does **not** treat `latest_ph` as the tank pH.
+
+## Graph/history request
+
+The official app also constructs:
+
+```http
+GET /api/v1/query/device/{DEVICE_SERIAL}/graph?date={ISO-8601}
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+The response contains a `results` array whose entries are shaped like:
+
+```text
+[date, { raw field values... }]
+```
+
+The official client maps these rows into objects with `date` plus transformed graph fields.
+
+## Multi-point graph retrieval
+
+For Home/history charting, the notifier now passes a caller-selected start timestamp to the same graph endpoint and parses the complete `results` array into a sorted list of `Measurement` values. Supported UI windows are 1D, 3D, 1W, 1M, and 1Y. These graph reads use the already stored bearer token and do not perform authentication.
+
+## KH-series graph field map
+
+The following mappings were recovered from the official client's graph transform and chart/widget code:
+
+| Field | Meaning | Transform |
+| --- | --- | --- |
+| `field22` | Tank KH / dKH | raw / 1000 |
+| `field26` | Dosing amount (mL) | raw / 5000 |
+| `field27` | Tank pH | raw / 1000 |
+| `field28` | pH(O), fully aerated pH | raw / 1000 |
+| derived `delta` | ΔpH | field27 - field28 |
+
+The official app explicitly computes:
+
+```text
+ΔpH = pH - pH(O)
+```
+
+Its user-facing help describes pH(O) as pH after full aeration and ΔpH as a relative indicator.
+
+### Previous graph-parser correction
+
+An earlier notifier build treated `field23` as pH because it was a plausibly scaled pH-looking field. Further chart tracing proved that this was incorrect. The actual pH / pH(O) pair is `field27` / `field28`.
+
+## Dosing field
+
+The official chart legend associates its **Dosing** series with the animated graph value sourced from `field26`.
+
+The official raw-value transform divides `field26` by 5000 before display.
+
+AquaWiz Notifier exposes this as optional `Dose (mL)` notification data.
+
+## Measurement selection policy
+
+The notifier uses this order:
+
+1. Authenticate with the same contract as the official AquaWiz app.
+2. Prefer the device-scoped `all_field` request for current values.
+3. Fall back to the serial-specific graph request when needed.
+4. Use the selected controller serial; never guess between multiple explicitly identified devices.
+5. Reject implausible KH values outside 2–20 dKH.
+6. Use explicit AquaWiz graph mappings instead of generic number guessing where the official mapping is known.
+7. On HTTP 401/403, pause monitoring rather than automatically re-authenticating.
+8. Record API failures in the app activity log.
+
+## Notification data model
+
+The notifier's measurement model currently supports:
+
+- dKH
+- tank pH
+- pH(O)
+- ΔpH
+- Dose (mL)
+- AquaWiz measurement timestamp
+- measurement ID/fingerprint when available
+
+The first successfully read result after configuration becomes a baseline and does not create a stale notification.
+
+## Timestamp handling
+
+- ISO timestamps with `Z` or an explicit offset retain the supplied timezone.
+- Naive local timestamps are interpreted using the Android device timezone.
+- Measurement polling is anchored to the AquaWiz result timestamp, not to when Android happened to wake the worker.
+
+## Validation and fixtures
+
+Static analysis gives us the request/transform contracts, but real-device response fixtures are still valuable because this API is undocumented.
+
+When capturing fixtures for tests:
+
+- redact usernames
+- redact passwords
+- redact access tokens
+- redact activation codes
+- redact personally identifying account information
+- keep only the response structure/fields needed by the parser tests
+
+Do not commit raw account responses containing secrets.
+
+## GitHub updater is separate
+
+The app-update mechanism does **not** use AquaWiz infrastructure. It makes an unauthenticated request to:
+
+```text
+https://api.github.com/repos/stevestokes/AquaWizNotificationsApp/releases/latest
+```
+
+No AquaWiz credentials or access token are sent to GitHub.
+
+
+## Notification integration
+
+AquaWiz Notifier presents new measurements in an Alkatronic-inspired layout:
+
+```text
+[DEVICE_SERIAL] New measurement result:
+n.nn dKH, n.nn pH
+```
+
+Optional expanded values may include pH(O), ΔpH, and Dose (mL). Tapping a measurement notification attempts to launch the installed official AquaWiz app by discovering its launcher activity by visible app label. This behavior is separate from the AquaWiz cloud API and does not alter request payloads.
