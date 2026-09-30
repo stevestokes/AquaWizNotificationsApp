@@ -4,7 +4,7 @@ Before publishing a tagged AquaWiz Notifier release:
 
 1. Confirm `versionCode` increased.
 2. Confirm `versionName` matches the intended Git tag.
-   - Example: `versionName = "0.7.0"` -> tag `v0.7.0`.
+   - Example: `versionName = "0.8.0"` -> tag `v0.8.0`.
 3. Run:
    ```bash
    ./scripts/verify.sh
@@ -12,12 +12,12 @@ Before publishing a tagged AquaWiz Notifier release:
 4. Confirm CI passes on `main`.
 5. Install the latest build on a real Android device.
 6. Confirm the four sections appear: **Home**, **Status**, **History**, **Config**.
-7. Confirm configured installs open to Home and unconfigured installs open to Config.
+7. Confirm configured installs open to Home and unconfigured installs automatically open Web Login.
 8. Confirm Home shows KH/pH summary cards, dosing cards, and **Take me to the AW app** opens the official app.
 9. Confirm chart ranges 1D/3D/1W/1M/1Y fetch and render available AquaWiz graph data.
-10. Confirm dragging across the chart shows the nearest measurement and the chart uses a single Y axis with KH range ±0.5 dKH fallback padding.
-7. With no saved account/device configuration, confirm the app opens on Config.
-8. With valid saved configuration, confirm the app opens on Status.
+10. Confirm inspection, pinch zoom, and double-tap reset; configured target ± deviation bounds receive ±0.5 dKH padding, with observed KH fallback. Toggle every line/style and reopen the app to check persistence. Verify all dates use MM/dd/yy @ HH:mm.
+7. With no saved session, confirm the app opens Web Login.
+8. With valid saved configuration, confirm the app opens on Home.
 9. Confirm Status contains the live activity console and it auto-scrolls to the newest entry.
 10. Confirm History is newest-first and stores dKH, pH, pH(O), ΔpH, Dose, device serial, and timestamp when available.
 11. Confirm notification-detail toggles do not remove values from History.
@@ -41,15 +41,14 @@ Before publishing a tagged AquaWiz Notifier release:
 14. Tap a measurement notification and confirm the installed official AquaWiz app opens. If the official app is absent, confirm AquaWiz Notifier opens instead.
 14. Confirm repeated background polls do not duplicate a measurement notification.
 15. Confirm the next-poll schedule re-anchors to the actual AquaWiz measurement timestamp.
-16. Test the recommended **AquaWiz Web Login** path:
+16. Test the only authentication path, **AquaWiz Web Login**:
     - enter username and device serial
-    - select **AquaWiz Web Login (recommended)**
     - confirm the official AquaWiz login page opens inside the notifier
     - sign in on the AquaWiz page
     - confirm the notifier captures the bearer token and closes the WebView
     - confirm the token is validated against the controller and monitoring starts
     - confirm the official AquaWiz mobile app remains authenticated while notifier polling runs
-17. Test manual **Existing bearer token** mode as a fallback and confirm it also starts without a notifier-side `/auth` call
+17. Confirm no password/token-entry selectors exist and old saved tokens survive the upgrade without passwords.
 17. Confirm a 401/403 pauses monitoring, does **not** call AquaWiz login again, clears the next poll, and shows the session-conflict notification.
 17. Confirm the activity/diagnostic console:
     - appends new events
@@ -74,14 +73,14 @@ Before publishing a tagged AquaWiz Notifier release:
 27. Confirm the release keystore is backed up securely outside GitHub.
 28. Push the matching version tag:
     ```bash
-    git tag v0.7.0
-    git push origin v0.7.0
+    git tag v0.8.0
+    git push origin v0.8.0
     ```
 29. Confirm the **Tagged APK Release** workflow succeeds.
 30. Confirm the GitHub Release contains both signed APK assets:
     ```text
     AquaWizNotifier.apk
-    AquaWizNotifier-v0.7.0.apk
+    AquaWizNotifier-v0.8.0.apk
     ```
 31. Confirm the README's permanent latest-download URL works:
     ```text

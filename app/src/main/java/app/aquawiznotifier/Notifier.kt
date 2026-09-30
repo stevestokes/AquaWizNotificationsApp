@@ -32,7 +32,7 @@ object Notifier {
     fun measurement(context: Context, serial: String, m: Measurement, previousKh: Double?) {
         if (!allowed(context)) return
         ensureChannel(context)
-        val time = DateTimeFormatter.ofPattern("h:mm a").withZone(ZoneId.systemDefault()).format(m.measuredAt)
+        val time = AppDates.format(m.measuredAt)
         val change = previousKh?.let {
             val delta = m.kh - it
             val arrow = when { delta > 0.0001 -> "↑"; delta < -0.0001 -> "↓"; else -> "→" }

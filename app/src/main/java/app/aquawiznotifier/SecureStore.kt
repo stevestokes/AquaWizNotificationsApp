@@ -15,6 +15,7 @@ import javax.crypto.spec.GCMParameterSpec
 
 class SecureStore(context: Context) {
     private val prefs = context.getSharedPreferences("aquawiz_notifier", Context.MODE_PRIVATE)
+    companion object { private val historyLock = Any(); private val activityLock = Any() }
     private val alias = "aquawiz_notifier_key_v1"
 
     private fun key(): SecretKey {
@@ -49,7 +50,6 @@ class SecureStore(context: Context) {
     fun saveSession(session: Session) {
         val json = JSONObject()
             .put("username", session.username)
-            .put("password", session.password)
             .put("accessToken", session.accessToken)
             .put("devices", session.devices.joinToString("\u001f"))
         prefs.edit().putString("session", encrypt(json.toString())).apply()
@@ -61,11 +61,15 @@ class SecureStore(context: Context) {
             val j = JSONObject(raw)
             Session(
                 j.getString("username"),
-                j.getString("password"),
                 j.getString("accessToken"),
                 j.optString("devices").split("\u001f").filter { it.isNotBlank() },
             )
         }.getOrNull()
+    }
+
+    fun migrateWebLogin() {
+        session()?.let(::saveSession)
+        prefs.edit().putInt("auth_method", 0).putBoolean("shared_token_mode", true).apply()
     }
 
     fun clearSession() = prefs.edit().remove("session").apply()
@@ -102,17 +106,26 @@ class SecureStore(context: Context) {
     fun sharedTokenMode(): Boolean = prefs.getBoolean("shared_token_mode", false)
     fun setSharedTokenMode(v: Boolean) = prefs.edit().putBoolean("shared_token_mode", v).apply()
 
-    fun authMethod(): Int {
-        if (prefs.contains("auth_method")) return prefs.getInt("auth_method", 0).coerceIn(0, 2)
-        // Migration for 0.5.x installs: preserve the prior manual-token/password selection.
-        if (prefs.contains("shared_token_mode")) {
-            return if (prefs.getBoolean("shared_token_mode", false)) 1 else 2
-        }
-        // Fresh installs default to AquaWiz Web Login.
-        return 0
-    }
+    fun authMethod(): Int = 0
+    fun setAuthMethod(v: Int) = prefs.edit().putInt("auth_method", 0).apply()
 
-    fun setAuthMethod(v: Int) = prefs.edit().putInt("auth_method", v.coerceIn(0, 2)).apply()
+    fun chartVisible(series: ChartSeries) = prefs.getBoolean("chart_visible_" + series.name, series.defaultVisible)
+    fun setChartVisible(series: ChartSeries, visible: Boolean) = prefs.edit().putBoolean("chart_visible_" + series.name, visible).apply()
+    fun chartLineStyle(series: ChartSeries): ChartLineStyle = runCatching {
+        ChartLineStyle.valueOf(prefs.getString("chart_style_" + series.name, "SOLID") ?: "SOLID")
+    }.getOrDefault(ChartLineStyle.SOLID)
+    fun setChartLineStyle(series: ChartSeries, style: ChartLineStyle) = prefs.edit().putString("chart_style_" + series.name, style.name).apply()
+    fun chartRange(): String = prefs.getString("chart_range", "DAY") ?: "DAY"
+    fun setChartRange(range: String) = prefs.edit().putString("chart_range", range).apply()
+
+    fun saveDeviceSummary(serial: String, summary: DeviceSummary) {
+        val json = JSONObject().put("field8", summary.khTarget?.times(1000))
+            .put("field15", summary.khDeviation?.times(1000)).put("latest_ph", summary.phProbeStatus)
+            .put("field14", summary.dosingRemainingMl).put("field16", summary.dosingWarningMl)
+        prefs.edit().putString("summary_" + serial.uppercase(), json.toString()).apply()
+    }
+    fun deviceSummary(serial: String): DeviceSummary? = prefs.getString("summary_" + serial.uppercase(), null)?.let { DeviceSummaryJson.parse(it, serial) }
+
     fun measurementIntervalMinutes(): Long = prefs.getLong("measurement_interval", 60L).coerceIn(15L, 24L * 60L)
     fun setMeasurementIntervalMinutes(v: Long) = prefs.edit().putLong("measurement_interval", v.coerceIn(15L, 24L * 60L)).apply()
     fun baseUrl(): String = prefs.getString("base_url", AquaWizApi.GLOBAL_BASE) ?: AquaWizApi.GLOBAL_BASE
@@ -143,15 +156,10 @@ class SecureStore(context: Context) {
     }
 
     fun saveMeasurements(serial: String, measurements: List<Measurement>) {
+        synchronized(historyLock) {
         if (measurements.isEmpty()) return
 
-        val merged = buildList<Pair<String, Measurement>> {
-            measurements.forEach { add(serial to it) }
-            addAll(measurementHistory())
-        }
-            .distinctBy { (deviceSerial, measurement) -> deviceSerial + "|" + measurement.fingerprint }
-            .sortedByDescending { (_, measurement) -> measurement.measuredAt }
-            .take(2000)
+        val merged = HistoryMerge.merge(measurements.map { serial to it } + measurementHistory())
 
         val updated = JSONArray()
         merged.forEach { (deviceSerial, measurement) ->
@@ -161,6 +169,7 @@ class SecureStore(context: Context) {
 
         merged.firstOrNull()?.let { (deviceSerial, measurement) ->
             saveLatestMeasurement(deviceSerial, measurement)
+        }
         }
     }
 
@@ -213,16 +222,16 @@ class SecureStore(context: Context) {
     }
 
     fun appendActivity(message: String) {
-        val timestamp = java.time.format.DateTimeFormatter.ofPattern("MMM d, h:mm:ss a")
-            .withZone(java.time.ZoneId.systemDefault())
-            .format(java.time.Instant.now())
+        synchronized(activityLock) {
+        val timestamp = AppDates.format(Instant.now())
         val line = "[$timestamp] $message"
         val current = prefs.getString("activity_log", "").orEmpty()
         val updated = if (current.isBlank()) line else current + "\n" + line
         val lines = updated.lineSequence().toList()
         val retained = if (lines.size > 5000) lines.takeLast(5000) else lines
         prefs.edit().putString("activity_log", retained.joinToString("\n")).apply()
+        }
     }
 
-    fun activityLog(): String = prefs.getString("activity_log", "").orEmpty()
+    fun activityLog(): String = AppDates.normalizeActivityLog(prefs.getString("activity_log", "").orEmpty())
 }

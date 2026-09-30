@@ -19,7 +19,7 @@ class MeasurementWorker(context: Context, params: WorkerParameters) : Worker(con
         val api = AquaWizApi(store.baseUrl())
 
         try {
-            val measurement = api.latestMeasurement(session, serial)
+            val measurement = api.latestMeasurement(session, serial) { store.saveDeviceSummary(serial, it) }
 
             store.setLastError(null)
             val previousFingerprint = store.lastFingerprint()

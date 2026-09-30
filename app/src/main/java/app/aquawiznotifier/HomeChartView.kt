@@ -3,222 +3,151 @@ package app.aquawiznotifier
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
+import android.view.GestureDetector
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import kotlin.math.abs
 import kotlin.math.max
-import kotlin.math.min
 
 class HomeChartView(context: Context) : View(context) {
-    private val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(120, 120, 120)
-        textSize = sp(11f)
-    }
-    private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(224, 224, 224)
-        strokeWidth = dp(1f)
-    }
-    private val khPaint = linePaint(Color.rgb(91, 52, 255))
-    private val phPaint = linePaint(Color.rgb(59, 191, 91))
-    private val phOpenAirPaint = linePaint(Color.rgb(29, 153, 69))
-    private val markerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(80, 80, 80)
-        strokeWidth = dp(1f)
-    }
-    private val tooltipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(30, 30, 30)
-        textSize = sp(12f)
-    }
+    private val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.GRAY; textSize = sp(11f) }
+    private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFE7E7E7.toInt(); strokeWidth = dp(1f) }
+    private val markerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.GRAY; strokeWidth = dp(1f) }
+    private val bandPaint = Paint().apply { color = 0x0E5B34FF }
+    private val limitPaint = Paint().apply { color = 0x775B34FF; strokeWidth = dp(1f); pathEffect = DashPathEffect(floatArrayOf(dp(4f), dp(4f)), 0f) }
+    private var items = emptyList<Measurement>()
+    private var visible = ChartSeries.values().filter { it.defaultVisible }.toSet()
+    private var styles = emptyMap<ChartSeries, ChartLineStyle>()
+    private var limits: Pair<Double?, Double?> = null to null
+    private var selected: Int? = null
+    private var zoom = 1.0
+    private var center = 0.5
+    var onSelected: ((Measurement) -> Unit)? = null
 
-    private var measurements: List<Measurement> = emptyList()
-    private var selectedIndex: Int? = null
-    private var khLowLimit: Double? = null
-    private var khHighLimit: Double? = null
+    private val scale = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        override fun onScale(detector: ScaleGestureDetector): Boolean {
+            val left = dp(44f)
+            val fraction = ((detector.focusX - left) / (width - dp(8f) - left)).coerceIn(0f, 1f).toDouble()
+            val oldZoom = zoom
+            zoom = (zoom * detector.scaleFactor).coerceIn(1.0, 20.0)
+            center += (fraction - 0.5) * (1.0 / oldZoom - 1.0 / zoom)
+            center = center.coerceIn(0.5 / zoom, 1 - 0.5 / zoom)
+            invalidate()
+            return true
+        }
+    })
+    private val gestures = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+        override fun onDown(e: MotionEvent) = true
+        override fun onDoubleTap(e: MotionEvent): Boolean { resetZoom(); return true }
+    })
 
-    private val timeFormatter = DateTimeFormatter.ofPattern("M/d HH:mm")
-        .withZone(ZoneId.systemDefault())
-
-    fun setMeasurements(
-        items: List<Measurement>,
-        lowLimit: Double? = null,
-        highLimit: Double? = null,
-    ) {
-        measurements = items.sortedBy { it.measuredAt }
-        khLowLimit = lowLimit
-        khHighLimit = highLimit
-        selectedIndex = null
+    fun setSeriesVisibility(series: Set<ChartSeries>, lineStyles: Map<ChartSeries, ChartLineStyle>) {
+        visible = series
+        styles = lineStyles
         invalidate()
     }
-
+    fun resetZoom() { zoom = 1.0; center = 0.5; invalidate() }
+    fun setMeasurements(measurements: List<Measurement>, lowLimit: Double? = null, highLimit: Double? = null) {
+        val sorted = measurements.sortedBy { it.measuredAt }
+        if (items == sorted && limits == (lowLimit to highLimit)) return
+        val selectedTime = selected?.let { items.getOrNull(it)?.measuredAt }
+        items = sorted
+        limits = lowLimit to highLimit
+        selected = selectedTime?.let { time -> items.indexOfFirst { it.measuredAt == time }.takeIf { it >= 0 } }
+        invalidate()
+    }
+    private fun timeWindow(): Pair<Long, Long> {
+        val start = items.first().measuredAt.toEpochMilli()
+        val end = items.last().measuredAt.toEpochMilli()
+        val span = max(60_000L, end - start)
+        return (start + span * (center - 0.5 / zoom)).toLong() to (start + span * (center + 0.5 / zoom)).toLong()
+    }
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        canvas.drawColor(Color.WHITE)
-
-        val left = dp(48f)
-        val right = width - dp(12f)
-        val top = dp(18f)
-        val bottom = height - dp(34f)
+        val left = dp(44f); val right = width - dp(8f)
+        val top = dp(12f); val bottom = height - dp(42f)
         if (right <= left || bottom <= top) return
-
-        val khValues = measurements.map { it.kh }
-        val baseLow = khLowLimit ?: khValues.minOrNull() ?: 7.0
-        val baseHigh = khHighLimit ?: khValues.maxOrNull() ?: 9.0
-
-        var yMin = baseLow - 0.5
-        var yMax = baseHigh + 0.5
-        if (yMax - yMin < 1.0) {
-            val mid = (yMin + yMax) / 2.0
-            yMin = mid - 0.5
-            yMax = mid + 0.5
+        val (yMin, yMax) = ChartBounds.calculate(items, limits.first, limits.second)
+        fun y(value: Double) = bottom - (bottom - top) * ((value - yMin) / (yMax - yMin)).toFloat()
+        limits.first?.let { low -> limits.second?.let { high ->
+            canvas.drawRect(left, y(high), right, y(low), bandPaint)
+            canvas.drawLine(left, y(low), right, y(low), limitPaint)
+            canvas.drawLine(left, y(high), right, y(high), limitPaint)
+        } }
+        for (i in 0..5) {
+            val value = yMin + (yMax - yMin) * i / 5
+            val yy = y(value)
+            canvas.drawLine(left, yy, right, yy, gridPaint)
+            canvas.drawText("%.1f".format(value), dp(3f), yy + dp(4f), axisPaint)
         }
-
-        val tickCount = 5
-        for (i in 0..tickCount) {
-            val fraction = i.toFloat() / tickCount.toFloat()
-            val y = bottom - (bottom - top) * fraction
-            canvas.drawLine(left, y, right, y, gridPaint)
-            val value = yMin + (yMax - yMin) * fraction
-            canvas.drawText(formatAxis(value), dp(4f), y + dp(4f), axisPaint)
-        }
-
-        if (measurements.isEmpty()) {
-            canvas.drawText("No measurements in this range yet", left + dp(12f), (top + bottom) / 2f, axisPaint)
+        if (items.isEmpty() || visible.isEmpty()) {
+            val message = if (items.isEmpty()) "No measurements in this range" else "Select a line above to display it"
+            canvas.drawText(message, left, (top + bottom) / 2, axisPaint)
             return
         }
-
-        val minTime = measurements.first().measuredAt.toEpochMilli()
-        val maxTime = measurements.last().measuredAt.toEpochMilli()
-        val timeSpan = max(1L, maxTime - minTime)
-
-        fun xFor(m: Measurement): Float {
-            val f = (m.measuredAt.toEpochMilli() - minTime).toDouble() / timeSpan.toDouble()
-            return left + (right - left) * f.toFloat()
-        }
-
-        fun yFor(value: Double): Float {
-            val fraction = ((value - yMin) / (yMax - yMin)).toFloat()
-            return bottom - (bottom - top) * fraction
-        }
-
+        val (minTime, maxTime) = timeWindow()
+        fun x(m: Measurement) = left + (right - left) * ((m.measuredAt.toEpochMilli() - minTime).toDouble() / max(1, maxTime - minTime)).toFloat()
         canvas.save()
         canvas.clipRect(left, top, right, bottom)
-        drawSeries(canvas, measurements.map { it to it.kh }, khPaint, ::xFor, ::yFor)
-        drawSeries(canvas, measurements.mapNotNull { m -> m.ph?.let { m to it } }, phPaint, ::xFor, ::yFor)
-        drawSeries(canvas, measurements.mapNotNull { m -> m.phOpenAir?.let { m to it } }, phOpenAirPaint, ::xFor, ::yFor)
-
-        selectedIndex?.takeIf { it in measurements.indices }?.let { index ->
-            val selected = measurements[index]
-            val x = xFor(selected)
-            canvas.drawLine(x, top, x, bottom, markerPaint)
-            canvas.drawCircle(x, yFor(selected.kh), dp(4f), khPaint)
+        visible.forEach { series ->
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = series.color; style = Paint.Style.STROKE; strokeWidth = dp(2.5f); strokeCap = Paint.Cap.ROUND
+                pathEffect = when (styles[series]) {
+                    ChartLineStyle.DASHED -> DashPathEffect(floatArrayOf(dp(8f), dp(5f)), 0f)
+                    ChartLineStyle.DOTTED -> DashPathEffect(floatArrayOf(dp(1f), dp(5f)), 0f)
+                    else -> null
+                }
+            }
+            val path = Path()
+            var continuing = false
+            items.forEach { m ->
+                val value = series.value(m)
+                if (value == null || !value.isFinite()) continuing = false
+                else {
+                    if (continuing) path.lineTo(x(m), y(value)) else path.moveTo(x(m), y(value))
+                    continuing = true
+                    canvas.drawCircle(x(m), y(value), dp(1.5f), paint)
+                }
+            }
+            canvas.drawPath(path, paint)
+            selected?.let { index -> series.value(items[index])?.let { value -> canvas.drawCircle(x(items[index]), y(value), dp(4f), paint) } }
         }
+        selected?.let { canvas.drawLine(x(items[it]), top, x(items[it]), bottom, markerPaint) }
         canvas.restore()
-
-        drawXAxisLabels(canvas, minTime, maxTime, left, right, bottom)
-
-        selectedIndex?.takeIf { it in measurements.indices }?.let { index ->
-            val selected = measurements[index]
-            val details = buildString {
-                append(timeFormatter.format(selected.measuredAt))
-                append("  KH ")
-                append("%.3f".format(selected.kh))
-                selected.ph?.let { append("  pH " + "%.3f".format(it)) }
-                selected.phOpenAir?.let { append("  pH(O) " + "%.3f".format(it)) }
-            }
-            canvas.drawText(details, left, dp(14f), tooltipPaint)
-        }
+        // Full requested date/time, two edge labels so the mobile labels do not collide.
+        val first = AppDates.format(java.time.Instant.ofEpochMilli(minTime))
+        val last = AppDates.format(java.time.Instant.ofEpochMilli(maxTime))
+        val fw = axisPaint.measureText(first); val lw = axisPaint.measureText(last)
+        canvas.drawText(first, left, bottom + dp(24f), axisPaint)
+        if (fw + lw + dp(10f) < right - left) canvas.drawText(last, right - lw, bottom + dp(24f), axisPaint)
     }
-
-    private fun drawSeries(
-        canvas: Canvas,
-        points: List<Pair<Measurement, Double>>,
-        paint: Paint,
-        xFor: (Measurement) -> Float,
-        yFor: (Double) -> Float,
-    ) {
-        if (points.isEmpty()) return
-        if (points.size == 1) {
-            canvas.drawCircle(xFor(points[0].first), yFor(points[0].second), dp(3f), paint)
-            return
-        }
-
-        val path = Path()
-        points.forEachIndexed { index, pair ->
-            val x = xFor(pair.first)
-            val y = yFor(pair.second)
-            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
-        }
-        canvas.drawPath(path, paint)
-    }
-
-    private fun drawXAxisLabels(
-        canvas: Canvas,
-        minTime: Long,
-        maxTime: Long,
-        left: Float,
-        right: Float,
-        bottom: Float,
-    ) {
-        val span = max(1L, maxTime - minTime)
-        for (i in 0..3) {
-            val fraction = i / 3.0
-            val instant = Instant.ofEpochMilli(minTime + (span * fraction).toLong())
-            val label = if (span <= 3L * 24 * 60 * 60 * 1000) {
-                DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()).format(instant)
-            } else {
-                DateTimeFormatter.ofPattern("M/d").withZone(ZoneId.systemDefault()).format(instant)
-            }
-            val x = left + (right - left) * fraction.toFloat()
-            val textWidth = axisPaint.measureText(label)
-            canvas.drawText(label, min(right - textWidth, max(left, x - textWidth / 2f)), bottom + dp(22f), axisPaint)
-        }
-    }
-
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (measurements.isEmpty()) return false
+        if (items.isEmpty()) return false
+        scale.onTouchEvent(event)
+        gestures.onTouchEvent(event)
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                val left = dp(48f)
-                val right = width - dp(12f)
-                if (right <= left) return false
-                val minTime = measurements.first().measuredAt.toEpochMilli()
-                val maxTime = measurements.last().measuredAt.toEpochMilli()
-                val span = max(1L, maxTime - minTime)
-                val clampedX = event.x.coerceIn(left, right)
-                val target = minTime + (((clampedX - left) / (right - left)) * span).toLong()
-                selectedIndex = measurements.indices.minByOrNull {
-                    abs(measurements[it].measuredAt.toEpochMilli() - target)
-                }
-                invalidate()
                 parent?.requestDisallowInterceptTouchEvent(true)
-                return true
+                if (!scale.isInProgress && event.pointerCount == 1) {
+                    val (start, end) = timeWindow()
+                    val left = dp(44f); val right = width - dp(8f)
+                    if (right <= left) return false
+                    val target = start + ((event.x.coerceIn(left, right) - left) / (right - left) * (end - start)).toLong()
+                    selected = items.indices.minByOrNull { abs(items[it].measuredAt.toEpochMilli() - target) }
+                    selected?.let { onSelected?.invoke(items[it]); contentDescription = AppDates.format(items[it].measuredAt) + ", KH " + items[it].kh }
+                    invalidate()
+                }
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                parent?.requestDisallowInterceptTouchEvent(false)
-                return true
-            }
+            MotionEvent.ACTION_UP -> { parent?.requestDisallowInterceptTouchEvent(false); performClick() }
+            MotionEvent.ACTION_CANCEL -> parent?.requestDisallowInterceptTouchEvent(false)
         }
-        return super.onTouchEvent(event)
+        return true
     }
-
-    private fun linePaint(colorValue: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = colorValue
-        strokeWidth = dp(2.5f)
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-    }
-
-    private fun formatAxis(value: Double): String {
-        val rounded = kotlin.math.round(value * 10.0) / 10.0
-        return if (rounded % 1.0 == 0.0) "%.0f".format(rounded) else "%.1f".format(rounded)
-    }
-
-    private fun dp(value: Float): Float = value * resources.displayMetrics.density
-    private fun sp(value: Float): Float = value * resources.displayMetrics.scaledDensity
+    override fun performClick(): Boolean { super.performClick(); return true }
+    private fun dp(value: Float) = value * resources.displayMetrics.density
+    private fun sp(value: Float) = value * resources.displayMetrics.scaledDensity
 }

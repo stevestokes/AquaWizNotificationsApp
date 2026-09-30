@@ -1,389 +1,244 @@
 package app.aquawiznotifier
 
-import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
-import android.graphics.Typeface
+import android.graphics.*
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.view.Gravity
-import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
-import android.widget.Toast
+import android.widget.*
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import kotlin.math.max
 import kotlin.concurrent.thread
 
-class HomeDashboardView(
-    context: Context,
-    private val store: SecureStore,
-) : ScrollView(context) {
-
+class HomeDashboardView(context: Context, private val store: SecureStore) : ScrollView(context) {
     enum class Range(val label: String, val seconds: Long) {
-        DAY("1D", 24L * 60L * 60L),
-        THREE_DAYS("3D", 3L * 24L * 60L * 60L),
-        WEEK("1W", 7L * 24L * 60L * 60L),
-        MONTH("1M", 30L * 24L * 60L * 60L),
-        YEAR("1Y", 365L * 24L * 60L * 60L),
+        DAY("1D", 86400), THREE_DAYS("3D", 259200), WEEK("1W", 604800), MONTH("1M", 2592000), YEAR("1Y", 31536000)
     }
-
+    private val regular = resources.getFont(R.font.aw_regular)
+    private val bold = resources.getFont(R.font.aw_extrabold)
     private val root = LinearLayout(context).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(dp(16), dp(14), dp(16), dp(28))
-        setBackgroundColor(Color.rgb(247, 247, 247))
+        orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(12), dp(16), dp(24)); setBackgroundColor(0xFFF2F2F2.toInt())
     }
-
-    private val khTimestamp = label("KH", 15f, Color.rgb(105, 105, 105))
-    private val khValue = label("—", 42f, Color.BLACK, bold = true)
-    private val phValue = label("—", 40f, Color.WHITE, bold = true)
-    private val phProbe = label("pH", 13f, Color.WHITE)
-    private val khTargetValue = label("—", 30f, Color.BLACK, bold = true)
-    private val latestDoseValue = label("—", 30f, Color.rgb(230, 95, 0), bold = true)
-    private val todayDoseValue = label("—", 22f, Color.rgb(210, 55, 45), bold = true)
-
-    private val legendKh = label("KH —", 14f, Color.rgb(91, 52, 255))
-    private val legendPh = label("pH —", 14f, Color.rgb(59, 191, 91))
-    private val legendPhOpenAir = label("pH(O) —", 14f, Color.rgb(29, 153, 69))
-    private val legendDelta = label("ΔpH —", 14f, Color.rgb(22, 174, 137))
-    private val chartTimestamp = label("", 12f, Color.rgb(95, 95, 95))
-
+    private val khTime = label("KH", 12f, Color.DKGRAY)
+    private val khValue = label("—", 40f, Color.BLACK, true)
+    private val phTitle = label("PH", 14f, Color.WHITE)
+    private val phValue = label("—", 40f, Color.WHITE, true)
+    private val phStatus = label("Unavailable", 12f, Color.WHITE)
+    private val khTarget = label("—", 30f, Color.BLACK, true)
+    private val remainingDose = label("—", 30f, Color.BLACK, true)
+    private val dailyDose = label("—", 30f, Color.BLACK, true)
+    private val syncStatus = label("", 12f, Color.GRAY)
+    private val selectedTime = label("", 12f, Color.GRAY)
     private val chart = HomeChartView(context)
-    private val rangeButtons = linkedMapOf<Range, Button>()
-    private var selectedRange = Range.DAY
-    private var fetchedRange: Range? = null
-
-    private val shortTime = DateTimeFormatter.ofPattern("HH:mm, MM/dd")
-        .withZone(ZoneId.systemDefault())
+    private val toggles = linkedMapOf<ChartSeries, CheckBox>()
+    private val buttons = linkedMapOf<Range, Button>()
+    private var selectedRange = runCatching { Range.valueOf(store.chartRange()) }.getOrDefault(Range.DAY)
+    private var inFlight = false
+    private var fetchedKey: String? = null
+    private var lastFetch = 0L
+    private var points = emptyList<Measurement>()
+    private var pointsDevice: String? = null
+    @Volatile private var generation = 0
+    private var displaySignature: String? = null
 
     init {
         addView(root, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        buildSummary()
-        buildChart()
-        refreshFromLocal()
+        buildSummary(); buildChart(); refreshFromLocal()
     }
-
-    fun onShown() {
-        refreshFromLocal()
-        if (fetchedRange != selectedRange) {
-            refreshFromApi(selectedRange)
-        }
-    }
-
+    fun onShown() { refreshFromLocal(); refreshFromApi() }
     fun refreshFromLocal() {
-        val latest = store.lastStoredMeasurement()?.second
-        val all = store.measurementHistory().map { it.second }
+        val serial = store.selectedDevice().orEmpty()
+        val all = store.measurementHistory().filter { it.first.equals(serial, true) }.map { it.second }
+        val latest = all.maxByOrNull { it.measuredAt }
+        val summary = store.deviceSummary(serial)
+        khTime.text = "KH" + (latest?.let { "  (" + AppDates.format(it.measuredAt) + ")" } ?: "")
+        khValue.text = latest?.let { "%.2f".format(it.kh) } ?: "—"
+        phValue.text = latest?.ph?.let { "%.2f".format(it) } ?: "—"
+        val probe = summary?.phProbeStatus
+        phTitle.text = if (latest?.ph != null) "PH" else "PH Probe Health"
+        if (probe != null && probe >= 1000) {
+            phTitle.text = "PH Probe Status"; phValue.text = "Fail"; phStatus.text = "PH Probe: Check probe"
+        } else if (latest?.ph == null && probe != null) {
+            phValue.text = "%.0f%%".format(probe.coerceAtMost(100.0)); phStatus.text = "PH Probe Health"
+        } else phStatus.text = if (probe == null) "Probe status unavailable" else if (probe >= 100) "PH Probe: Healthy" else "PH Probe: %.0f%%".format(probe)
+        phStatus.background = rounded(if (probe != null && probe in 100.0..999.0) 0xFF60C579.toInt() else 0x33333333, 6f)
+        khTarget.text = summary?.khTarget?.let { "%.2f".format(it) } ?: "—"
+        remainingDose.text = summary?.dosingRemainingMl?.let { "%.0f".format(it) } ?: "—"
+        remainingDose.setTextColor(if (summary?.dosingRemainingMl != null && summary.dosingWarningMl != null && summary.dosingRemainingMl < summary.dosingWarningMl) 0xFFE76C00.toInt() else Color.BLACK)
+        val today = LocalDate.now()
+        val todayValues = all.filter { it.measuredAt.atZone(ZoneId.systemDefault()).toLocalDate() == today }.mapNotNull { it.doseMl }
+        dailyDose.text = if (todayValues.isEmpty()) "—" else "%.2f".format(todayValues.sum())
         val since = Instant.now().minusSeconds(selectedRange.seconds)
-        val ranged = all.filter { !it.measuredAt.isBefore(since) }.sortedBy { it.measuredAt }
-
-        if (latest != null) {
-            khTimestamp.text = "KH  (" + shortTime.format(latest.measuredAt) + ")"
-            khValue.text = "%.2f dKH".format(latest.kh)
-            phValue.text = latest.ph?.let { "%.2f".format(it) } ?: "—"
-            phProbe.text = if (latest.ph != null) "pH reading available" else "pH unavailable"
-            latestDoseValue.text = latest.doseMl?.let { "%.2f mL".format(it) } ?: "Unavailable"
-
-            legendKh.text = "KH " + "%.3f".format(latest.kh)
-            legendPh.text = "pH " + (latest.ph?.let { "%.3f".format(it) } ?: "—")
-            legendPhOpenAir.text = "pH(O) " + (latest.phOpenAir?.let { "%.3f".format(it) } ?: "—")
-            legendDelta.text = "ΔpH " + (latest.deltaPh?.let { "%+.2f".format(it) } ?: "—")
-            chartTimestamp.text = shortTime.format(latest.measuredAt)
-        } else {
-            khTimestamp.text = "KH"
-            khValue.text = "—"
-            phValue.text = "—"
-            phProbe.text = "pH unavailable"
-            latestDoseValue.text = "Unavailable"
-            legendKh.text = "KH —"
-            legendPh.text = "pH —"
-            legendPhOpenAir.text = "pH(O) —"
-            legendDelta.text = "ΔpH —"
-            chartTimestamp.text = ""
-        }
-
-        val zone = ZoneId.systemDefault()
-        val today = java.time.LocalDate.now(zone)
-        val todayDoseValues = all
-            .filter { it.measuredAt.atZone(zone).toLocalDate() == today }
-            .mapNotNull { it.doseMl }
-        todayDoseValue.text = if (todayDoseValues.isNotEmpty()) {
-            "%.2f mL".format(todayDoseValues.sum())
-        } else {
-            "Unavailable"
-        }
-
-        // KH target/high/low are not yet mapped from the AquaWiz API. The chart API accepts
-        // explicit limits so the next phase can plug them in without changing rendering code.
-        khTargetValue.text = "—"
-
-        chart.setMeasurements(ranged, lowLimit = null, highLimit = null)
-        updateRangeButtons()
+        val displayed = ((if (pointsDevice == serial) points else emptyList()) + all)
+            .filter { !it.measuredAt.isBefore(since) }.distinctBy { it.measuredAt }.sortedBy { it.measuredAt }
+        chart.setMeasurements(displayed, summary?.khLow, summary?.khHigh)
+        val signature = displayed.lastOrNull()?.toString() + selectedRange.name + serial
+        if (signature != displaySignature) { displayed.lastOrNull()?.let(::showSelected); displaySignature = signature }
+        buttons.forEach { (range, button) -> button.isSelected = range == selectedRange; button.setTextColor(if (range == selectedRange) Color.WHITE else Color.DKGRAY); button.background = rounded(if (range == selectedRange) 0xFF3B82F6.toInt() else 0xFFF3F3F3.toInt(), 12f) }
     }
-
     private fun buildSummary() {
-        val hero = horizontalCard().apply {
-            minimumHeight = dp(154)
+        val hero = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; background = DiagonalHero(); elevation = dp(4).toFloat(); clipToOutline = true }
+        val kh = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(14), dp(4), dp(14)); addView(khTime)
+            addView(valueWithUnit(khValue, "dKH", Color.BLACK))
         }
-
-        val khSide = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(16), dp(14), dp(10), dp(14))
-            background = rounded(Color.WHITE, 22f)
-            addView(khTimestamp)
-            addView(khValue)
+        val ph = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(14), dp(12), dp(14)); addView(phTitle); addView(phValue); addView(phStatus)
         }
-        hero.addView(khSide, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
-
-        val phSide = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(18), dp(14), dp(14), dp(14))
-            background = rounded(Color.rgb(25, 139, 242), 22f)
-            addView(label("PH", 15f, Color.WHITE))
-            addView(phValue)
-            addView(phProbe)
-        }
-        hero.addView(phSide, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
+        hero.addView(kh, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        hero.addView(ph, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         root.addView(hero, full().apply { bottomMargin = dp(12) })
-
-        val secondRow = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
-        secondRow.addView(
-            smallCard(
-                title = "KH Target",
-                valueView = khTargetValue,
-                subtitle = "Target not yet mapped from AquaWiz"
-            ),
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                rightMargin = dp(6)
-            }
-        )
-
-        val awButtonCard = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(dp(12), dp(18), dp(12), dp(18))
-            background = rounded(Color.WHITE, 22f)
-            elevation = dp(2).toFloat()
+        val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        row.addView(card("KH Target", khTarget, "dKH"), weighted(true))
+        row.addView(LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; background = rounded(Color.WHITE, 24f); elevation = dp(3).toFloat(); setPadding(dp(10), dp(14), dp(10), dp(14))
             addView(Button(context).apply {
-                text = "Take me to the AW app"
+                text = "Take me to the AW app"; isAllCaps = false; textSize = 17f; typeface = bold; setTextColor(Color.BLACK); background = rounded(Color.WHITE, 18f)
                 setOnClickListener { openOfficialAquaWiz() }
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        }
-        secondRow.addView(
-            awButtonCard,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
-                leftMargin = dp(6)
-            }
-        )
-        root.addView(secondRow, full().apply { bottomMargin = dp(12) })
-
-        val dosingRow = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
-        dosingRow.addView(
-            smallCard(
-                title = "⚠ KH Dosing",
-                valueView = latestDoseValue,
-                subtitle = "Latest graph dose"
-            ).apply {
-                background = rounded(Color.rgb(255, 248, 190), 22f, strokeColor = Color.rgb(255, 146, 50))
-            },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                rightMargin = dp(6)
-            }
-        )
-        dosingRow.addView(
-            smallCard(
-                title = "Today's Dosing",
-                valueView = todayDoseValue,
-                subtitle = "From locally cached measurements"
-            ),
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                leftMargin = dp(6)
-            }
-        )
-        root.addView(dosingRow, full().apply { bottomMargin = dp(14) })
+            }, full())
+        }, weighted(false))
+        root.addView(row, full().apply { bottomMargin = dp(12) })
+        val doses = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        doses.addView(card("KH Dosing", remainingDose, "mL"), weighted(true))
+        doses.addView(card("Today's Dosing", dailyDose, "mL"), weighted(false))
+        root.addView(doses, full().apply { bottomMargin = dp(14) })
     }
-
     private fun buildChart() {
         val card = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-            background = rounded(Color.WHITE, 22f)
-            elevation = dp(2).toFloat()
+            orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(12), dp(12), dp(12)); background = rounded(Color.WHITE, 24f); elevation = dp(3).toFloat()
         }
-
-        val legendRow1 = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            addView(legendKh, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(legendPh, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        var row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        ChartSeries.values().forEachIndexed { index, series ->
+            if (index % 2 == 0 && index > 0) { card.addView(row); row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL } }
+            val check = CheckBox(context).apply {
+                text = series.label; textSize = 12f; typeface = regular; setTextColor(series.color); buttonTintList = android.content.res.ColorStateList.valueOf(series.color)
+                isChecked = store.chartVisible(series)
+                setOnCheckedChangeListener { _, checked -> store.setChartVisible(series, checked); applyChartPreferences() }
+                setOnLongClickListener {
+                    AlertDialog.Builder(context).setTitle(series.label + " line style")
+                        .setSingleChoiceItems(arrayOf("Solid", "Dashed", "Dotted"), store.chartLineStyle(series).ordinal) { dialog, which ->
+                            store.setChartLineStyle(series, ChartLineStyle.values()[which]); applyChartPreferences(); dialog.dismiss()
+                        }.show(); true
+                }
+                contentDescription = series.label + ", toggle line; long press to change line style"
+            }
+            toggles[series] = check
+            row.addView(check, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
-        val legendRow2 = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            addView(legendPhOpenAir, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(legendDelta, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        }
-        card.addView(legendRow1)
-        card.addView(legendRow2)
-        card.addView(chartTimestamp, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            gravity = Gravity.END
-        })
-
-        card.addView(chart, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(330)))
-
-        val ranges = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
+        card.addView(row)
+        card.addView(selectedTime)
+        chart.onSelected = ::showSelected
+        card.addView(chart, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(300)))
+        val ranges = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
         Range.values().forEach { range ->
             val button = Button(context).apply {
-                text = range.label
-                textSize = 13f
-                minWidth = 0
-                minimumWidth = 0
-                setPadding(dp(8), 0, dp(8), 0)
-                setOnClickListener { selectRange(range) }
+                text = range.label; textSize = 13f; isAllCaps = false; minWidth = 0; minimumWidth = 0; setPadding(0, 0, 0, 0)
+                setOnClickListener { selectedRange = range; store.setChartRange(range.name); generation++; inFlight = false; chart.resetZoom(); refreshFromLocal(); refreshFromApi(force = true) }
             }
-            rangeButtons[range] = button
-            ranges.addView(button, LinearLayout.LayoutParams(0, dp(48), 1f))
+            buttons[range] = button
+            ranges.addView(button, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(2), 0, dp(2), 0) })
         }
         card.addView(ranges)
-
+        card.addView(label("Drag to inspect · Pinch to zoom · Double tap to reset", 12f, Color.GRAY))
+        card.addView(syncStatus)
+        card.addView(Button(context).apply { text = "Refresh"; isAllCaps = false; setOnClickListener { refreshFromApi(force = true) } }, full())
         root.addView(card, full())
-
-        root.addView(label(
-            "💡 Drag across the chart to inspect a measurement. The Y axis is shared by KH, pH, and pH(O). " +
-                "Phase 1 uses KH values in the selected range with ±0.5 dKH padding; AquaWiz KH alert limits can plug into the same chart scale once mapped.",
-            12f,
-            Color.rgb(80, 80, 80)
-        ).apply {
-            setPadding(dp(8), dp(12), dp(8), dp(8))
-        })
+        applyChartPreferences()
     }
-
-    private fun selectRange(range: Range) {
-        selectedRange = range
-        fetchedRange = null
-        refreshFromLocal()
-        refreshFromApi(range)
+    private fun showSelected(m: Measurement) {
+        selectedTime.text = AppDates.format(m.measuredAt)
+        toggles.forEach { (series, toggle) -> toggle.text = series.label + " " + (series.value(m)?.let { "%.2f".format(it) } ?: "—") }
     }
-
-    private fun refreshFromApi(range: Range) {
-        val session = store.session() ?: return
+    private fun applyChartPreferences() = chart.setSeriesVisibility(ChartSeries.values().filter { store.chartVisible(it) }.toSet(), ChartSeries.values().associateWith { store.chartLineStyle(it) })
+    private fun refreshFromApi(force: Boolean = false) {
+        val session = store.session() ?: run { syncStatus.text = "Connect AquaWiz in Config"; return }
         val serial = store.selectedDevice()?.takeIf { it.isNotBlank() } ?: return
-        val since = Instant.now().minusSeconds(range.seconds)
-
-        thread(name = "AquaWizHomeGraph") {
+        if (store.authPaused()) { syncStatus.text = "Session expired. Reconnect using Web Login in Config."; return }
+        val baseUrl = store.baseUrl()
+        val key = serial + baseUrl + selectedRange.name
+        if (inFlight || (!force && fetchedKey == key && System.currentTimeMillis() - lastFetch < 60000)) return
+        val requestGeneration = ++generation
+        val range = selectedRange
+        inFlight = true
+        syncStatus.text = "Refreshing AquaWiz…"
+        fun current() = requestGeneration == generation && store.session()?.accessToken == session.accessToken && store.selectedDevice() == serial && store.baseUrl() == baseUrl
+        thread(name = "AquaWizHome") {
+            var summaryError: String? = null
             try {
-                val api = AquaWizApi(store.baseUrl())
-                val measurements = api.graphMeasurements(session, serial, since)
-                if (measurements.isNotEmpty()) {
-                    store.saveMeasurements(serial, measurements)
-                    store.appendActivity("Home " + range.label + " chart refreshed from AquaWiz: " + measurements.size + " points")
-                } else {
-                    store.appendActivity("Home " + range.label + " chart returned no graph points")
-                }
-                fetchedRange = range
-                post { refreshFromLocal() }
-            } catch (e: AquaWizApi.ApiException) {
-                if (e.status == 401 || e.status == 403) {
-                    store.setAuthPaused(true)
-                    store.clearNextPollEpochMs()
-                }
-                store.appendActivity("Home chart API error: " + (e.message ?: "unknown"))
+                val api = AquaWizApi(baseUrl)
+                try {
+                    val latest = api.latestMeasurement(session, serial) { if (current()) store.saveDeviceSummary(serial, it) }
+                    if (current()) store.saveMeasurement(serial, latest)
+                } catch (e: AquaWizApi.ApiException) { if (e.status == 401 || e.status == 403) throw e; summaryError = "Current status unavailable" }
+                catch (e: Exception) { summaryError = "Current status unavailable" }
+                val fetched = api.graphMeasurements(session, serial, Instant.now().minusSeconds(maxOf(range.seconds, 86400)))
+                if (!current()) return@thread
+                store.saveMeasurements(serial, fetched)
                 post {
-                    Toast.makeText(context, "Chart refresh failed; showing local history", Toast.LENGTH_SHORT).show()
+                    if (!current()) return@post
+                    points = fetched; pointsDevice = serial; fetchedKey = key; lastFetch = System.currentTimeMillis(); inFlight = false
                     refreshFromLocal()
+                    syncStatus.text = summaryError ?: if (fetched.isEmpty()) "No history returned for this range" else "Updated " + AppDates.format(Instant.now())
                 }
             } catch (e: Exception) {
-                store.appendActivity("Home chart refresh error: " + (e.message ?: e.javaClass.simpleName))
-                post { refreshFromLocal() }
+                if (!current()) return@thread
+                val authFailure = e is AquaWizApi.ApiException && (e.status == 401 || e.status == 403)
+                if (authFailure) { store.setAuthPaused(true); store.clearNextPollEpochMs(); PollScheduler.cancel(context) }
+                store.appendActivity("Home refresh failed: " + (e.message ?: e.javaClass.simpleName))
+                post {
+                    if (!current()) return@post
+                    inFlight = false; refreshFromLocal()
+                    syncStatus.text = if (authFailure) "Session expired. Reconnect using Web Login in Config." else "Refresh failed. Showing saved readings. Tap Refresh to retry."
+                }
             }
         }
     }
-
     private fun openOfficialAquaWiz() {
-        val pm = context.packageManager
-        val direct = pm.getLaunchIntentForPackage("com.kuannnn.aquawiz")
-        val fallback = if (direct == null) {
-            val launcherQuery = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-            pm.queryIntentActivities(launcherQuery, 0)
-                .firstOrNull {
-                    it.activityInfo.packageName != context.packageName &&
-                        it.loadLabel(pm).toString().contains("AquaWiz", ignoreCase = true)
-                }
-                ?.activityInfo
-                ?.let {
-                    Intent(Intent.ACTION_MAIN)
-                        .addCategory(Intent.CATEGORY_LAUNCHER)
-                        .setClassName(it.packageName, it.name)
-                }
-        } else null
-
-        val launch = direct ?: fallback
-        if (launch == null) {
-            Toast.makeText(context, "Official AquaWiz app is not installed", Toast.LENGTH_SHORT).show()
-            return
-        }
-        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-        context.startActivity(launch)
+        val launch = context.packageManager.getLaunchIntentForPackage("com.kuannnn.aquawiz")
+        try { context.startActivity((launch ?: Intent(Intent.ACTION_VIEW, Uri.parse("https://www.aquawiz.net"))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        catch (e: Exception) { Toast.makeText(context, "Unable to open AquaWiz", Toast.LENGTH_SHORT).show() }
     }
-
-    private fun smallCard(title: String, valueView: TextView, subtitle: String): LinearLayout =
-        LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(14), dp(14), dp(14))
-            background = rounded(Color.WHITE, 22f)
-            elevation = dp(2).toFloat()
-            addView(label(title, 14f, Color.rgb(105, 105, 105)))
-            addView(valueView)
-            addView(label(subtitle, 11f, Color.rgb(125, 125, 125)))
-        }
-
-    private fun horizontalCard() = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
+    private fun card(title: String, value: TextView, unit: String) = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(14), dp(14), dp(14)); background = rounded(Color.WHITE, 24f); elevation = dp(3).toFloat(); minimumHeight = dp(100)
+        val heading = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        heading.addView(label(title, 14f, Color.DKGRAY), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        if (title != "Today's Dosing") heading.addView(TextView(context).apply {
+            text = "⚙"; textSize = 18f; gravity = Gravity.CENTER; background = rounded(0xFFF1F1F1.toInt(), 16f)
+            contentDescription = "Open " + title + " settings in AquaWiz"; setOnClickListener { openOfficialAquaWiz() }
+        }, LinearLayout.LayoutParams(dp(30), dp(30)))
+        addView(heading); addView(valueWithUnit(value, unit, Color.BLACK))
     }
-
-    private fun label(textValue: String, size: Float, color: Int, bold: Boolean = false) =
-        TextView(context).apply {
-            text = textValue
-            textSize = size
-            setTextColor(color)
-            if (bold) setTypeface(typeface, Typeface.BOLD)
-            setPadding(0, dp(2), 0, dp(2))
-        }
-
-    private fun rounded(
-        color: Int,
-        radiusDp: Float,
-        strokeColor: Int? = null,
-    ) = GradientDrawable().apply {
-        shape = GradientDrawable.RECTANGLE
-        setColor(color)
-        cornerRadius = dp(radiusDp.toInt()).toFloat()
-        if (strokeColor != null) setStroke(dp(2), strokeColor)
+    private fun valueWithUnit(value: TextView, unit: String, color: Int) = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL; gravity = Gravity.BOTTOM
+        value.setAutoSizeTextTypeUniformWithConfiguration(18, value.textSize.div(resources.displayMetrics.scaledDensity).toInt(), 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+        addView(value, LinearLayout.LayoutParams(0, dp(58), 1f))
+        addView(label(unit, 12f, color).apply { setPadding(dp(3), 0, 0, dp(9)) })
     }
-
-    private fun full() = LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT,
-        ViewGroup.LayoutParams.WRAP_CONTENT,
-    )
-
-    private fun updateRangeButtons() {
-        rangeButtons.forEach { (range, button) ->
-            button.isEnabled = range != selectedRange
-            button.alpha = if (range == selectedRange) 1.0f else 0.82f
-        }
+    private fun label(value: String, size: Float, color: Int, heavy: Boolean = false) = TextView(context).apply {
+        text = value; textSize = size; setTextColor(color); typeface = if (heavy) bold else regular; setPadding(0, dp(2), 0, dp(2))
     }
-
-    private fun dp(value: Int): Int =
-        (value * resources.displayMetrics.density).toInt()
+    private fun rounded(color: Int, radius: Float) = GradientDrawable().apply { setColor(color); cornerRadius = dp(radius.toInt()).toFloat() }
+    private fun weighted(left: Boolean) = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply { if (left) rightMargin = dp(6) else leftMargin = dp(6) }
+    private fun full() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+    private inner class DiagonalHero : Drawable() {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        override fun draw(canvas: Canvas) {
+            val box = RectF(bounds)
+            val round = Path().apply { addRoundRect(box, dp(24).toFloat(), dp(24).toFloat(), Path.Direction.CW) }
+            canvas.save(); canvas.clipPath(round); paint.shader = null; paint.color = Color.WHITE; canvas.drawRect(box, paint)
+            paint.shader = LinearGradient(box.width() * 0.45f, 0f, box.width(), box.height(), 0xFF2386F8.toInt(), 0xFF397CF0.toInt(), Shader.TileMode.CLAMP)
+            val diagonal = Path().apply { moveTo(box.width() * 0.57f, 0f); lineTo(box.width(), 0f); lineTo(box.width(), box.height()); lineTo(box.width() * 0.43f, box.height()); close() }
+            canvas.drawPath(diagonal, paint); canvas.restore()
+        }
+        override fun setAlpha(alpha: Int) { paint.alpha = alpha }
+        override fun setColorFilter(filter: ColorFilter?) { paint.colorFilter = filter }
+        @Deprecated("Deprecated in Android") override fun getOpacity() = PixelFormat.TRANSLUCENT
+        override fun getOutline(outline: android.graphics.Outline) { outline.setRoundRect(bounds, dp(24).toFloat()) }
+    }
 }

@@ -214,3 +214,16 @@ Real-device testing confirmed that the official AquaWiz app can remain logged in
 ## 0.7.0 Home dashboard
 
 Version `0.7.0` adds Phase 1 of the AquaWiz-style Home screen: KH/pH summary cards, dosing cards, official AquaWiz app shortcut, interactive graph inspection, range buttons, graph API backfill, and a single shared Y axis. The initial Y-axis fallback uses observed KH min/max with ±0.5 dKH padding until AquaWiz KH limit settings are mapped.
+
+## 0.8.0 Remaining dashboard phases
+
+- Web Login is the only login method and opens automatically with no saved session. Saved tokens migrate; old passwords are discarded.
+- Official-style diagonal KH/pH hero, rounded cards, official fonts, KH target, probe status, and remaining dosing solution.
+- Verified field8/field15 map target and deviation; chart bounds include ±0.5 dKH padding.
+- Five independent chart lines with locally saved visibility, solid/dashed/dotted styles, and range; drag inspection, pinch zoom, reset gesture.
+- Range caching, loading/error/empty states, and protection against stale requests after account/device changes.
+- Compact recycled History rows with full tap-through detail; timestamp deduplication preserves missing optional fields.
+- All displayed dates use MM/dd/yy @ HH:mm in the device timezone.
+- Corrected dose scaling for small raw graph doses.
+
+Validation: unit tests cover settings isolation/scaling, chart bounds, current and graph measurement scaling, history merging, and date formatting. Live login, notification delivery, and pixel-level Home parity still require a physical Android device.
