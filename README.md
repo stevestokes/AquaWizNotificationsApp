@@ -47,7 +47,7 @@ Account names and device ID suffixes are redacted.
 - Manual **Check for updates** button.
 - Test notification uses the most recent real stored measurement when available; before the first real reading it uses one of several normal sample measurements.
 - GitHub and Reef2Reef links directly in the app.
-- Measurement notifications open the installed official AquaWiz app when tapped; if AquaWiz is not installed, AquaWiz Notifier opens instead.
+- Measurement notifications open AquaWiz Notifier when tapped, bringing its existing screen to the foreground when it is already open.
 - Custom white/blue AquaWiz Notifier launcher icon for the public build.
 
 ## AquaWiz Web Login and bearer-token authentication
@@ -220,8 +220,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 15
-versionName = "0.8.6"
+versionCode = 18
+versionName = "0.8.7"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
