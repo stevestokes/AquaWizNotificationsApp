@@ -40,7 +40,8 @@ Account names and device ID suffixes are redacted.
 - Encrypted AquaWiz account/token storage using Android Keystore.
 - Background polling never auto-logs in after an AquaWiz session rejection; monitoring pauses instead to avoid disrupting the official AquaWiz app session.
 - Four-section app UI: **Home**, **Status**, **History**, and **Config**.
-- Persistent, auto-scrolling activity/diagnostic log in the Status tab.
+- Compact floating bottom menu with vector House, Clock arrow, Pulse, and Gear icons, plus a blue circle for the selected section.
+- Persistent, auto-scrolling activity/diagnostic log in the optional Status section.
 - Local measurement History stores every retrieved measurement and all available values regardless of notification-display settings.
 - Global and China AquaWiz server support.
 - GitHub Releases update checker with an Android notification when a newer app version is available.
@@ -220,8 +221,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 18
-versionName = "0.8.7"
+versionCode = 19
+versionName = "0.8.8"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -286,6 +287,12 @@ If possible, please donate **in honor of Kaylee Stokes, Michigan Chapter**.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+Bottom-menu icons are adapted from [Lucide](https://lucide.dev). Their license notices are included in the APK at `res/raw/lucide_license.txt`.
+
+## 0.8.8 Compact bottom menu
+
+The top tabs are replaced by a compact floating white menu with Home, History, Status, and Config. The selected icon and label sit inside a blue circle. Status is hidden by default; enable it under Config → App → Show Status in bottom menu. The menu reserves space below the content, handles system-navigation and keyboard insets, and restores the selected section after screen rotation.
 
 
 ## 0.8.0 Home and chart update

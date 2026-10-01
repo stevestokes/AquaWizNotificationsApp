@@ -26,10 +26,7 @@ class MainActivity : Activity() {
     private lateinit var statusSection: View
     private lateinit var historySection: View
     private lateinit var configSection: View
-    private lateinit var homeTabButton: Button
-    private lateinit var statusTabButton: Button
-    private lateinit var historyTabButton: Button
-    private lateinit var configTabButton: Button
+    private lateinit var bottomNavigation: BottomNavigationView
     private var currentSection = "config"
 
     private lateinit var username: EditText
@@ -64,13 +61,14 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false)
         store = SecureStore(this)
         store.migrateWebLogin()
         Notifier.ensureChannel(this)
         requestNotifications()
         setContentView(buildUi())
         populate()
-        selectInitialSection()
+        selectInitialSection(savedInstanceState?.getString("current_section"))
         if ((store.session()?.accessToken.isNullOrBlank() || store.authPaused()) && savedInstanceState == null) rootLogin()
         UpdateChecker.schedule(this)
     }
@@ -89,45 +87,36 @@ class MainActivity : Activity() {
         super.onPause()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("current_section", currentSection)
+        super.onSaveInstanceState(outState)
+    }
+
     private fun buildUi(): View {
+        bottomNavigation = BottomNavigationView(this, store.showStatusTab()) { showSection(it) }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            setBackgroundColor(0xFFF2F2F2.toInt())
             setOnApplyWindowInsetsListener { view, insets ->
-                val bars = if (Build.VERSION.SDK_INT >= 30) insets.getInsets(WindowInsets.Type.systemBars()) else null
+                val bars = if (Build.VERSION.SDK_INT >= 30) {
+                    insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+                } else null
                 @Suppress("DEPRECATION")
-                view.setPadding(bars?.left ?: insets.systemWindowInsetLeft, 0,
-                    bars?.right ?: insets.systemWindowInsetRight, bars?.bottom ?: insets.systemWindowInsetBottom)
-                insets
-            }
-        }
-
-        val tabBar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(8), dp(8), dp(8), dp(4))
-            setOnApplyWindowInsetsListener { view, insets ->
-                val topInset = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    insets.getInsets(WindowInsets.Type.statusBars()).top
-                } else {
-                    @Suppress("DEPRECATION")
-                    insets.systemWindowInsetTop
-                }
-                view.setPadding(dp(8), topInset + dp(8), dp(8), dp(4))
+                val bottom = bars?.bottom ?: insets.systemWindowInsetBottom
+                val keyboardBottom = if (Build.VERSION.SDK_INT >= 30) {
+                    insets.getInsets(WindowInsets.Type.ime()).bottom
+                } else if (bottom > dp(100)) bottom else 0
+                val keyboardOpen = keyboardBottom > bottom || (bars == null && keyboardBottom > 0)
+                @Suppress("DEPRECATION")
+                view.setPadding(bars?.left ?: insets.systemWindowInsetLeft,
+                    bars?.top ?: insets.systemWindowInsetTop,
+                    bars?.right ?: insets.systemWindowInsetRight,
+                    if (keyboardOpen) keyboardBottom else 0)
+                bottomNavigation.setBottomInset(if (keyboardOpen) 0 else bottom)
                 insets
             }
             post { requestApplyInsets() }
         }
-
-        homeTabButton = tabButton("Home") { showSection("home") }
-        statusTabButton = tabButton("Status") { showSection("status") }
-        statusTabButton.visibility = if (store.showStatusTab()) View.VISIBLE else View.GONE
-        historyTabButton = tabButton("History") { showSection("history") }
-        configTabButton = tabButton("Config") { showSection("config") }
-
-        tabBar.addView(homeTabButton, tabLayout())
-        tabBar.addView(historyTabButton, tabLayout())
-        tabBar.addView(statusTabButton, tabLayout())
-        tabBar.addView(configTabButton, tabLayout())
-        root.addView(tabBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         val content = FrameLayout(this)
         homeSection = HomeDashboardView(this, store)
@@ -141,14 +130,8 @@ class MainActivity : Activity() {
         content.addView(configSection, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
         root.addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(bottomNavigation, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         return root
-    }
-
-    private fun tabLayout() = LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(dp(2), 0, dp(2), 0) }
-
-    private fun tabButton(label: String, action: () -> Unit) = AwUi.button(this, label).apply {
-        textSize = 12f; setPadding(0, 0, 0, 0)
-        setOnClickListener { action() }
     }
 
     private fun showSection(section: String) {
@@ -158,13 +141,7 @@ class MainActivity : Activity() {
         historySection.visibility = if (section == "history") View.VISIBLE else View.GONE
         configSection.visibility = if (section == "config") View.VISIBLE else View.GONE
 
-        homeTabButton.isEnabled = section != "home"
-        statusTabButton.isEnabled = section != "status"
-        historyTabButton.isEnabled = section != "history"
-        configTabButton.isEnabled = section != "config"
-
-        listOf(homeTabButton to "home", historyTabButton to "history", statusTabButton to "status", configTabButton to "config")
-            .forEach { (button, name) -> AwUi.styleButton(button, name == section) }
+        bottomNavigation.select(section)
         if (section == "config") updateConnectionState()
         if (section == "home") homeSection.onShown()
         if (section == "status") updateStatus()
@@ -283,12 +260,12 @@ class MainActivity : Activity() {
         val actions = sectionCard("App")
         actions.addView(AwUi.label(this, "Version " + BuildConfig.VERSION_NAME, 12f), full())
         actions.addView(Switch(this).apply {
-            text = "Show Status tab"; textSize = 14f; typeface = resources.getFont(R.font.aw_regular)
+            text = "Show Status in bottom menu"; textSize = 14f; typeface = resources.getFont(R.font.aw_regular)
             setTextColor(AwUi.INK); setPadding(0, dp(8), 0, dp(8))
             isChecked = store.showStatusTab()
             setOnCheckedChangeListener { _, checked ->
                 store.setShowStatusTab(checked)
-                statusTabButton.visibility = if (checked) View.VISIBLE else View.GONE
+                bottomNavigation.setStatusVisible(checked)
                 if (!checked && currentSection == "status") showSection("config")
             }
         }, full())
@@ -350,9 +327,12 @@ class MainActivity : Activity() {
         setPadding(dp(12), dp(10), dp(12), dp(10))
     }
 
-    private fun selectInitialSection() {
+    private fun selectInitialSection(restoredSection: String? = null) {
         val configured = store.session()?.accessToken?.isNotBlank() == true && !store.selectedDevice().isNullOrBlank()
-        showSection(if (configured && !store.authPaused()) "home" else "config")
+        val restored = restoredSection?.takeIf {
+            it in listOf("home", "history", "config") || (it == "status" && store.showStatusTab())
+        }
+        showSection(if (configured && !store.authPaused()) restored ?: "home" else "config")
     }
 
     private fun rootLogin() { window.decorView.post { signIn() } }
