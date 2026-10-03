@@ -94,6 +94,16 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
             body = KhCalibration.body(session, serial, value).toString())
     }
 
+    fun setKhTarget(session: Session, serial: String, settings: KhTargetSettings) {
+        request("POST", baseUrl + KhCalibration.PATH, token = session.accessToken,
+            body = KhDeviceSettings.targetBody(session, serial, settings).toString())
+    }
+
+    fun setKhDosing(session: Session, serial: String, settings: KhDosingSettings, current: DeviceSummary) {
+        request("POST", baseUrl + KhCalibration.PATH, token = session.accessToken,
+            body = KhDeviceSettings.dosingBody(session, serial, settings, current).toString())
+    }
+
     private fun request(method: String, url: String, token: String? = null, body: String? = null): String {
         val conn = (URI(url).toURL().openConnection() as HttpURLConnection).apply {
             requestMethod = method

@@ -11,6 +11,9 @@ data class DeviceSummary(
     val dosingRemainingMl: Double? = null,
     val dosingWarningMl: Double? = null,
     val trueTankKh: Double? = null,
+    val dosingField5: String? = null,
+    val dosingField6: String? = null,
+    val measurementSchedule: String? = null,
 ) {
     val khLow: Double? get() = if (khTarget != null && khDeviation != null) khTarget - khDeviation else null
     val khHigh: Double? get() = if (khTarget != null && khDeviation != null) khTarget + khDeviation else null
@@ -44,12 +47,15 @@ object DeviceSummaryJson {
             else return null
         fun number(key: String) = objectValue.opt(key)?.toString()?.toDoubleOrNull()?.takeIf { it.isFinite() }
         return DeviceSummary(
-            khTarget = number("field8")?.div(1000.0)?.takeIf { it in 2.0..20.0 },
-            khDeviation = number("field15")?.div(1000.0)?.takeIf { it in 0.0..20.0 },
+            khTarget = number("field8")?.div(1000.0)?.takeIf { it > 0 },
+            khDeviation = number("field15")?.div(1000.0)?.takeIf { it >= 0 },
             phProbeStatus = number("latest_ph")?.takeIf { it >= 0 },
             dosingRemainingMl = number("field14")?.takeIf { it >= 0 },
             dosingWarningMl = number("field16")?.takeIf { it >= 0 },
             trueTankKh = number("field10")?.div(1000.0)?.takeIf { it >= 0 },
+            dosingField5 = objectValue.opt("field5")?.toString()?.takeIf { it.matches(Regex("[0-9]+")) },
+            dosingField6 = objectValue.opt("field6")?.toString()?.takeIf { it.matches(Regex("[0-9]+")) },
+            measurementSchedule = objectValue.opt("field13")?.toString()?.takeIf { it.matches(Regex("[0-9]{5}")) },
         )
     }
 }

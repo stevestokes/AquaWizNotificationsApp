@@ -221,8 +221,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 20
-versionName = "0.8.9"
+versionCode = 21
+versionName = "0.8.10"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -316,3 +316,12 @@ Measurement notifications use one bold text block, with selected optional fields
 ### APK updates
 
 Download `AquaWizNotifier-signed` from a successful push CI run. Installable builds and tagged releases use the same persistent `AQUAWIZ_KEYSTORE_*` secrets (including `AQUAWIZ_KEY_ALIAS` and `AQUAWIZ_KEY_PASSWORD`). Never regenerate or rotate this key for ordinary updates. Android requires the same application ID and signing certificate, plus a non-decreasing version code. The runner-generated debug APKs distributed through v0.8.2 used different keys; switching those installations to the release key requires one final uninstall/install. Uninstalling clears local app data, so reconnect and restore preferences afterward. Future signed updates preserve them. CI intentionally does not distribute debug APKs.
+
+## 0.8.10 In-app KH target and dosing settings
+
+Tap KH Target or KH Dosing, including the card icons, to open an in-app bottom sheet. Both sheets load the controller’s current settings before enabling edits. Apply saves changes to AquaWiz without opening the official app; Cancel closes the sheet without saving.
+
+- **KH Target:** target dKH, email deviation threshold, measurement interval (1–6 hours), and sleep start/end (00:00–23:00). These are controller settings, separate from this app’s local polling and notification preferences.
+- **KH Dosing:** solution remaining, mL to increase 1 dKH, maximum mL per hour (0 stops dosing), and low-solution email threshold. Existing packed dosing calibration digits are preserved for controller models that use them.
+
+New settings take effect at the next measurement. Select **[SYNC]** on the KHA LCD to update immediately. Request contracts are checked against the official APK and a mock HTTP server; live controller writes are not part of automated tests.

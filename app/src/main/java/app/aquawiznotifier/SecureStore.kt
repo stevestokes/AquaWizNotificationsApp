@@ -125,6 +125,7 @@ class SecureStore(context: Context) {
             .put("field10", summary.trueTankKh?.times(1000))
             .put("field15", summary.khDeviation?.times(1000)).put("latest_ph", summary.phProbeStatus)
             .put("field14", summary.dosingRemainingMl).put("field16", summary.dosingWarningMl)
+            .put("field5", summary.dosingField5).put("field6", summary.dosingField6).put("field13", summary.measurementSchedule)
         prefs.edit().putString("summary_" + serial.uppercase(), json.toString()).apply()
     }
     fun deviceSummary(serial: String): DeviceSummary? = prefs.getString("summary_" + serial.uppercase(), null)?.let { DeviceSummaryJson.parse(it, serial) }
