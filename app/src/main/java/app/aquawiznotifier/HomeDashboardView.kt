@@ -2,11 +2,9 @@ package app.aquawiznotifier
 
 import android.app.AlertDialog
 import android.content.Context
-import android.content.Intent
 import android.graphics.*
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.Drawable
-import android.net.Uri
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -242,11 +240,6 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
             }
         }
     }
-    private fun openOfficialAquaWiz() {
-        val launch = context.packageManager.getLaunchIntentForPackage("com.kuannnn.aquawiz")
-        try { context.startActivity((launch ?: Intent(Intent.ACTION_VIEW, Uri.parse("https://www.aquawiz.net"))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-        catch (e: Exception) { Toast.makeText(context, "Unable to open AquaWiz", Toast.LENGTH_SHORT).show() }
-    }
     private fun openCalibration() {
         val session = store.session()
         val serial = store.selectedDevice()
@@ -301,6 +294,66 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
                 }
             }).show()
     }
+    private fun openSettings(section: KhSettingsSection) {
+        val session = store.session()
+        val serial = store.selectedDevice()
+        if (session == null || serial.isNullOrBlank() || store.authPaused()) {
+            Toast.makeText(context, "Reconnect using Web Login in Config", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val baseUrl = store.baseUrl()
+        fun current() = store.session()?.accessToken == session.accessToken && store.session()?.username == session.username &&
+            store.selectedDevice() == serial && store.baseUrl() == baseUrl
+        fun read(): DeviceSummary {
+            check(current() && !store.authPaused()) { "Connection changed. Reconnect in Config" }
+            val summary = DeviceSummaryJson.parse(AquaWizApi(baseUrl).rawAllFields(session, serial), serial)
+                ?: error("Unable to identify this controller's settings")
+            check(current() && !store.authPaused()) { "Connection changed. Reopen settings" }
+            return summary
+        }
+        fun pauseIfExpired(error: Throwable) {
+            if (current() && error is AquaWizApi.ApiException && (error.status == 401 || error.status == 403)) {
+                store.setAuthPaused(true); store.clearNextPollEpochMs(); PollScheduler.cancel(context)
+            }
+        }
+        KhSettingsDialog(context, section, serial,
+            load = { done -> thread(name = "AquaWizSettingsRead") {
+                val result = runCatching { read().also { store.saveDeviceSummary(serial, it) } }
+                result.exceptionOrNull()?.let(::pauseIfExpired)
+                post { done(result) }
+            } },
+            submit = { target, dosing, done -> thread(name = "AquaWizSettingsWrite") {
+                val result = runCatching {
+                    // Read again before saving so packed dosing calibration digits are current.
+                    val summary = read()
+                    val api = AquaWizApi(baseUrl)
+                    val updated = if (target != null) {
+                        api.setKhTarget(session, serial, target)
+                        val fields = KhDeviceSettings.targetBody(session, serial, target)
+                        summary.copy(khTarget = target.target.toDouble(), khDeviation = target.deviation.toDouble(),
+                            measurementSchedule = fields.getString("field13"))
+                    } else {
+                        val value = requireNotNull(dosing)
+                        val fields = KhDeviceSettings.dosingBody(session, serial, value, summary)
+                        api.setKhDosing(session, serial, value, summary)
+                        summary.copy(dosingRemainingMl = value.remaining.toDouble(), dosingWarningMl = value.emailThreshold.toDouble(),
+                            dosingField5 = fields.getString("field5"), dosingField6 = fields.getString("field6"))
+                    }
+                    if (current()) {
+                        store.saveDeviceSummary(serial, updated)
+                        store.appendActivity(if (target != null) "KH target settings saved" else "KH dosing settings saved")
+                    }
+                }
+                result.exceptionOrNull()?.let(::pauseIfExpired)
+                post {
+                    done(result)
+                    if (result.isSuccess && current()) {
+                        refreshFromLocal()
+                        Toast.makeText(context, "Settings saved. Select SYNC on the KHA to apply now.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            } }).show()
+    }
     private fun card(title: String, value: TextView, unit: String) = HeroCardLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(10), dp(4), dp(6), dp(4))
@@ -312,12 +365,16 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
             }, fullHeight(16))
             addView(valueWithUnit(value, unit, Color.BLACK), fullHeight(30))
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        if (title != "Today's Dosing") addView(exitIcon(title), LinearLayout.LayoutParams(dp(32), dp(44)))
-    }
-    private fun exitIcon(title: String) = ImageButton(context).apply {
-        setImageResource(R.drawable.ic_open_aw); scaleType = ImageView.ScaleType.FIT_CENTER
-        setPadding(dp(5), dp(11), dp(5), dp(11)); background = rounded(0xFFF1F1F1.toInt(), 16f)
-        contentDescription = "Open AquaWiz app for " + title; setOnClickListener { openOfficialAquaWiz() }
+        if (title != "Today's Dosing") {
+            val section = if (title == "KH Target") KhSettingsSection.TARGET else KhSettingsSection.DOSING
+            setOnClickListener { openSettings(section) }
+            addView(ImageButton(context).apply {
+                setImageResource(if (section == KhSettingsSection.TARGET) R.drawable.ic_kh_target else R.drawable.ic_kh_dose)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setPadding(dp(5), dp(11), dp(5), dp(11)); background = rounded(0xFFF1F1F1.toInt(), 16f)
+                contentDescription = "Edit $title settings"; setOnClickListener { openSettings(section) }
+            }, LinearLayout.LayoutParams(dp(32), dp(44)))
+        }
     }
     private fun valueWithUnit(value: TextView, unit: String, color: Int): MeasurementValueView {
         value.gravity = Gravity.CENTER_VERTICAL; value.setSingleLine(true)

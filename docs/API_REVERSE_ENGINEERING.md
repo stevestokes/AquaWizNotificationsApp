@@ -237,3 +237,19 @@ Verified against the official Android APK with SHA-256 `62a0ee7721a652f06f136368
 The official form uses decimal input, initializes from the server setting, and disables submission until the form is changed and valid. Zero disables calibration. The app's instructions tell the user to select `[SYNC]` on the KHA LCD for immediate application and allow about 30 minutes for calibration to finish. The notifier follows that sequence and does not modify historical measurement values.
 
 The probe widget (`TankKhPhProbeWidget`, function 29327) reads `latest_ph`: below 100 is a health percentage, 100 through 999 is healthy, and 1000 or higher is failure. `latest_ph1` supplies the actual pH value. The notifier displays healthy status alongside 100%, caps the percentage at 100, and never interprets failure codes as percentages.
+
+## KH target and dosing settings (v0.8.10)
+
+Static provenance: same official APK/Hermes v96 bundle used for calibration. TargetKhSettingsModal (#30790) and submit (#30793), plus KhDosingSettingsModal (#29929) and submit (#29932), call changeConfig (#29656). Both POST `/api/v1/KH/start-config` with `user`, `token.access_token`, `serial`, and only the relevant settings.
+
+| Sheet value | Server field | Encoding |
+| --- | --- | --- |
+| Target KH | field8 | dKH × 1000, string |
+| Email KH deviation | field15 | dKH × 1000, string |
+| Measurement interval and sleep | field13 | One interval digit + two sleep-start hour digits + two sleep-end hour digits, e.g. `12207` |
+| Remaining solution | field14 | Whole mL, string |
+| Email low-solution threshold | field16 | Whole mL, string |
+| mL to increase 1 dKH | field5 | KH1: direct whole mL; other models: 3-digit mL prefix + preserved raw field5 % 1000 as 3 digits |
+| Maximum dosing per hour | field6 | KH1: direct whole mL; other models: 3-digit mL prefix + preserved raw field6 % 10000 as 4 digits |
+
+The APK picker offers intervals 1–6 and sleep hours 0–23. The native UI uses these same options. Sleep hours remain controller-local hour values; no timezone conversion is applied. Maximum dosing 0 stops dosing. The native client rereads current fields immediately before applying edits to preserve the latest packed calibration suffixes; it does not automatically retry hardware-setting writes. Missing settings prevent submission. These server email thresholds do not change the notifier’s local notification toggles.
