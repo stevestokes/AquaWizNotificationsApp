@@ -3,8 +3,41 @@ package app.aquawiznotifier
 import org.junit.Assert.*
 import org.junit.Test
 import java.math.BigDecimal
+import com.sun.net.httpserver.HttpServer
+import java.net.InetSocketAddress
+import org.json.JSONObject
 
 class KhCalibrationTest {
+    @Test fun sendsVerifiedCalibrationRequestAndDoesNotRetryARejectedWrite() {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        var requests = 0
+        var method = ""
+        var received: JSONObject? = null
+        var response = 200
+        server.createContext(KhCalibration.PATH) { exchange ->
+            requests++
+            method = exchange.requestMethod
+            received = JSONObject(exchange.requestBody.bufferedReader().use { it.readText() })
+            val bytes = "ok".toByteArray()
+            exchange.sendResponseHeaders(response, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        server.start()
+        try {
+            val api = AquaWizApi("http://127.0.0.1:${server.address.port}")
+            val session = Session("test-user", "test-token", listOf("KH-A"))
+            api.setTrueTankKh(session, "KH-A", BigDecimal("7.86"))
+            assertEquals("POST", method)
+            assertEquals("7860", received!!.getString("field10"))
+            assertEquals("KH-A", received!!.getString("serial"))
+            response = 403
+            try {
+                api.setTrueTankKh(session, "KH-A", BigDecimal.ZERO)
+                fail("Rejected calibration must throw")
+            } catch (error: AquaWizApi.ApiException) { assertEquals(403, error.status) }
+            assertEquals(2, requests)
+        } finally { server.stop(0) }
+    }
     @Test fun matchesOfficialEndpointAndScaledFieldWithNoOtherSettingChanges() {
         val body = KhCalibration.body(Session("test-account", "test-token", listOf("KH-A")), " kh-a ", KhCalibration.parse("7.861")!!)
         assertEquals("/api/v1/KH/start-config", KhCalibration.PATH)

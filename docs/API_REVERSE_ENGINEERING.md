@@ -228,8 +228,9 @@ AquaWiz Notifier presents new measurements in an Alkatronic-inspired layout:
 n.nn dKH, n.nn pH
 ```
 
-Optional expanded values may include pH(O), ΔpH, and Dose (mL). Tapping a measurement notification attempts to launch the installed official AquaWiz app by discovering its launcher activity by visible app label. This behavior is separate from the AquaWiz cloud API and does not alter request payloads.
-# In-app True Tank KH calibration
+Optional notification values may include pH(O), ΔpH, and Dose (mL). Measurement notifications open AquaWiz Notifier. This behavior is separate from the AquaWiz cloud API and does not alter request payloads.
+
+## In-app True Tank KH calibration
 
 Verified against the official Android APK with SHA-256 `62a0ee7721a652f06f1363684ec8760e75d74a8e8a88be0b32a673ec6cb97d84` (Hermes bytecode v96): `CalibrateKhModal` function 29661 reads `Number(allFields.field10) / 1000`; its submit function 29664 calls `changeConfig({serial, field10: (Number(trueTankKh) * 1000).toString()})`. `changeConfig` function 29656 posts to `/api/v1/KH/start-config`, combining `user`, `token.access_token`, and those two fields. Only `field10` is written. This is a configuration request, not an immediate hardware SYNC command.
 
