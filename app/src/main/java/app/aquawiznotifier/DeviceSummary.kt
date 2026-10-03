@@ -10,6 +10,7 @@ data class DeviceSummary(
     val phProbeStatus: Double? = null,
     val dosingRemainingMl: Double? = null,
     val dosingWarningMl: Double? = null,
+    val trueTankKh: Double? = null,
 ) {
     val khLow: Double? get() = if (khTarget != null && khDeviation != null) khTarget - khDeviation else null
     val khHigh: Double? get() = if (khTarget != null && khDeviation != null) khTarget + khDeviation else null
@@ -27,7 +28,7 @@ object DeviceSummaryJson {
                     val ownSerial = MeasurementJson.serialKeys.firstNotNullOfOrNull { key ->
                         value.optString(key).takeIf { it.isNotBlank() && it != "null" }
                     } ?: inheritedSerial
-                    if (listOf("field8", "field15", "latest_ph", "field14").any { value.has(it) }) candidates += ownSerial to value
+                    if (listOf("field8", "field10", "field15", "latest_ph", "field14").any { value.has(it) }) candidates += ownSerial to value
                     val keys = value.keys()
                     while (keys.hasNext()) {
                         val key = keys.next()
@@ -48,6 +49,7 @@ object DeviceSummaryJson {
             phProbeStatus = number("latest_ph")?.takeIf { it >= 0 },
             dosingRemainingMl = number("field14")?.takeIf { it >= 0 },
             dosingWarningMl = number("field16")?.takeIf { it >= 0 },
+            trueTankKh = number("field10")?.div(1000.0)?.takeIf { it >= 0 },
         )
     }
 }

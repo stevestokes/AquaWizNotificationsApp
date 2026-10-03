@@ -80,10 +80,11 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         val probe = summary?.phProbeStatus
         phTitle.text = if (latest?.ph != null) "PH" else "PH Probe Health"
         if (probe != null && probe >= 1000) {
-            phTitle.text = "PH Probe Status"; phValue.text = "Fail"; phStatus.text = "PH Probe: Check probe"
+            phTitle.text = "PH Probe Status"; phValue.text = "Fail"
         } else if (latest?.ph == null && probe != null) {
-            phValue.text = "%.0f%%".format(probe.coerceAtMost(100.0)); phStatus.text = "PH Probe Health"
-        } else phStatus.text = if (probe == null) "Probe status unavailable" else if (probe >= 100) "PH Probe: Healthy" else "PH Probe: %.0f%%".format(probe)
+            phValue.text = "%.0f%%".format(ProbeHealth.percent(probe));
+        }
+        phStatus.text = ProbeHealth.label(probe)
         phStatus.background = rounded(if (probe != null && probe in 100.0..999.0) 0xFF60C579.toInt() else 0x33333333, 6f)
         khTarget.text = summary?.khTarget?.let { "%.2f".format(it) } ?: "—"
         remainingDose.text = summary?.dosingRemainingMl?.let { "%.0f".format(it) } ?: "—"
@@ -136,9 +137,13 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
             addView(AwUi.button(context, "Calibrate").apply {
                 textSize = 18f; background = rounded(Color.WHITE, 12f); setPadding(0, 0, 0, 0)
                 setAutoSizeTextTypeUniformWithConfiguration(12, 18, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
-                setSingleLine(true); setOnClickListener { openOfficialAquaWiz() }
+                setSingleLine(true); setOnClickListener { openCalibration() }
             }, LinearLayout.LayoutParams(0, dp(44), 1f))
-            addView(exitIcon("Calibrate"), LinearLayout.LayoutParams(dp(32), dp(44)))
+            addView(ImageButton(context).apply {
+                setImageResource(R.drawable.ic_calibrate_kh); scaleType = ImageView.ScaleType.FIT_CENTER
+                setPadding(dp(5), dp(11), dp(5), dp(11)); background = rounded(0xFFF1F1F1.toInt(), 16f)
+                contentDescription = "Set true tank KH"; setOnClickListener { openCalibration() }
+            }, LinearLayout.LayoutParams(dp(32), dp(44)))
         }, weighted(false))
         root.addView(row, full().apply { bottomMargin = dp(8) })
         val doses = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
@@ -241,6 +246,60 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         val launch = context.packageManager.getLaunchIntentForPackage("com.kuannnn.aquawiz")
         try { context.startActivity((launch ?: Intent(Intent.ACTION_VIEW, Uri.parse("https://www.aquawiz.net"))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         catch (e: Exception) { Toast.makeText(context, "Unable to open AquaWiz", Toast.LENGTH_SHORT).show() }
+    }
+    private fun openCalibration() {
+        val session = store.session()
+        val serial = store.selectedDevice()
+        if (session == null || serial.isNullOrBlank() || store.authPaused()) {
+            Toast.makeText(context, "Reconnect using Web Login in Config", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val baseUrl = store.baseUrl()
+        fun current() = store.session()?.accessToken == session.accessToken &&
+            store.selectedDevice() == serial && store.baseUrl() == baseUrl
+        fun pauseIfExpired(error: Throwable) {
+            if (current() && error is AquaWizApi.ApiException && (error.status == 401 || error.status == 403)) {
+                store.setAuthPaused(true); store.clearNextPollEpochMs(); PollScheduler.cancel(context)
+            }
+        }
+        KhCalibrationDialog(context, store.deviceSummary(serial)?.trueTankKh,
+            load = { done ->
+                thread(name = "AquaWizCalibrationRead") {
+                    val result = runCatching {
+                        check(current() && !store.authPaused()) { "Connection changed. Reconnect in Config" }
+                        val summary = DeviceSummaryJson.parse(AquaWizApi(baseUrl).rawAllFields(session, serial), serial)
+                            ?: error("Unable to identify this controller's calibration setting")
+                        val value = summary.trueTankKh ?: error("AquaWiz did not return the current calibration setting")
+                        check(current()) { "Connection changed. Reopen calibration" }
+                        store.saveDeviceSummary(serial, summary)
+                        value
+                    }
+                    result.exceptionOrNull()?.let(::pauseIfExpired)
+                    post { done(result) }
+                }
+            },
+            submit = { value, done ->
+                thread(name = "AquaWizCalibrationWrite") {
+                    val result = runCatching {
+                        check(current() && !store.authPaused()) { "Connection changed. Reconnect in Config" }
+                        AquaWizApi(baseUrl).setTrueTankKh(session, serial, value)
+                        if (current()) {
+                            store.deviceSummary(serial)?.let { store.saveDeviceSummary(serial, it.copy(trueTankKh = value.toDouble())) }
+                            store.appendActivity("True tank KH calibration saved: " + value.stripTrailingZeros().toPlainString() + " dKH")
+                        }
+                    }
+                    result.exceptionOrNull()?.let(::pauseIfExpired)
+                    post {
+                        done(result)
+                        if (result.isSuccess) {
+                            val message = if (value.signum() == 0) "Calibration disable setting saved. Select SYNC on the KHA to apply now."
+                                else "Calibration saved. Select SYNC on the KHA to apply now."
+                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                            refreshFromLocal()
+                        }
+                    }
+                }
+            }).show()
     }
     private fun card(title: String, value: TextView, unit: String) = HeroCardLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL

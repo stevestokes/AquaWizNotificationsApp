@@ -298,6 +298,8 @@ The top tabs are replaced by a compact floating white menu with Home, History, S
 
 Android's system navigation area is black with light controls, including on edge-to-edge screens. Pull down from the top of Home or History to fetch current measurements and retained history; the Home Refresh button is removed. Tap any history row to open a note editor that slides up from the bottom. Save adds or edits the note beneath that reading; saving an empty note removes it. Notes are stored only on the device and survive app restarts, signed updates, and server refreshes. They are matched by controller and measurement minute, so merged readings keep their notes. Cancel dismisses the editor without changing the saved note.
 
+Calibrate opens a bottom sheet inside this app. It loads the current True Tank KH and submits a changed decimal value using AquaWiz's official `field10` contract. Enter `0` to disable calibration. Select `[SYNC]` on the KHA LCD for immediate application; otherwise the controller applies settings through its normal sync. The pH probe bubble includes the health percentage, with healthy values capped at 100% and failure codes shown as Fail.
+
 
 ## 0.8.0 Home and chart update
 

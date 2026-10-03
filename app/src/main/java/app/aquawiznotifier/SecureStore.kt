@@ -122,6 +122,7 @@ class SecureStore(context: Context) {
 
     fun saveDeviceSummary(serial: String, summary: DeviceSummary) {
         val json = JSONObject().put("field8", summary.khTarget?.times(1000))
+            .put("field10", summary.trueTankKh?.times(1000))
             .put("field15", summary.khDeviation?.times(1000)).put("latest_ph", summary.phProbeStatus)
             .put("field14", summary.dosingRemainingMl).put("field16", summary.dosingWarningMl)
         prefs.edit().putString("summary_" + serial.uppercase(), json.toString()).apply()
