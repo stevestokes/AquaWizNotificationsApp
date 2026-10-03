@@ -157,6 +157,17 @@ class SecureStore(context: Context) {
         saveMeasurements(serial, listOf(measurement))
     }
 
+    // Keep annotations separate from server readings: refetching or merging cannot overwrite them.
+    fun measurementNote(serial: String, measurement: Measurement): String =
+        prefs.getString("measurement_note_" + HistoryMerge.readingKey(serial, measurement), "").orEmpty()
+
+    fun saveMeasurementNote(serial: String, measurement: Measurement, note: String) {
+        val key = "measurement_note_" + HistoryMerge.readingKey(serial, measurement)
+        prefs.edit().apply {
+            if (note.isBlank()) remove(key) else putString(key, note.trim())
+        }.apply()
+    }
+
     fun saveMeasurements(serial: String, measurements: List<Measurement>) {
         synchronized(historyLock) {
         if (measurements.isEmpty()) return

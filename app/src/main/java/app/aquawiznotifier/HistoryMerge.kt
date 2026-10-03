@@ -6,6 +6,8 @@ import java.util.Locale
 object HistoryMerge {
     fun readingTime(measurement: Measurement) = measurement.measuredAt.truncatedTo(ChronoUnit.MINUTES)
     fun sameReading(first: Measurement, second: Measurement) = readingTime(first) == readingTime(second)
+    fun readingKey(serial: String, measurement: Measurement) =
+        serial.trim().uppercase(Locale.ROOT) + "|" + readingTime(measurement).toEpochMilli()
 
     fun merge(items: List<Pair<String, Measurement>>): List<Pair<String, Measurement>> {
         val merged = linkedMapOf<String, Pair<String, Measurement>>()
@@ -13,7 +15,7 @@ object HistoryMerge {
             // all_field and graph report the same test with different seconds/milliseconds.
             // Controller + displayed minute is the shared identity across both sources.
             val normalizedSerial = serial.trim().uppercase(Locale.ROOT)
-            val key = normalizedSerial + "|" + readingTime(measurement).toEpochMilli()
+            val key = readingKey(normalizedSerial, measurement)
             val previous = merged[key]?.second
             merged[key] = normalizedSerial to if (previous == null) measurement else combine(previous, measurement)
         }

@@ -23,6 +23,9 @@ class MainActivity : Activity() {
     private lateinit var store: SecureStore
 
     private lateinit var homeSection: HomeDashboardView
+    private lateinit var homeRefresh: PullRefreshView
+    private lateinit var historyRefresh: PullRefreshView
+    private var manualRefreshInFlight = false
     private lateinit var statusSection: View
     private lateinit var historySection: View
     private lateinit var configSection: View
@@ -62,6 +65,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false)
+        SystemNavigation.configure(window)
         store = SecureStore(this)
         store.migrateWebLogin()
         Notifier.ensureChannel(this)
@@ -120,11 +124,14 @@ class MainActivity : Activity() {
 
         val content = FrameLayout(this)
         homeSection = HomeDashboardView(this, store)
+        homeRefresh = PullRefreshView(this, { homeSection.canScrollVertically(-1) }, ::refreshMeasurements).apply {
+            addView(homeSection, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }
         statusSection = buildStatusSection()
         historySection = buildHistorySection()
         configSection = buildConfigSection()
 
-        content.addView(homeSection, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        content.addView(homeRefresh, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         content.addView(statusSection, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         content.addView(historySection, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         content.addView(configSection, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -136,7 +143,7 @@ class MainActivity : Activity() {
 
     private fun showSection(section: String) {
         currentSection = section
-        homeSection.visibility = if (section == "home") View.VISIBLE else View.GONE
+        homeRefresh.visibility = if (section == "home") View.VISIBLE else View.GONE
         statusSection.visibility = if (section == "status") View.VISIBLE else View.GONE
         historySection.visibility = if (section == "history") View.VISIBLE else View.GONE
         configSection.visibility = if (section == "config") View.VISIBLE else View.GONE
@@ -191,10 +198,14 @@ class MainActivity : Activity() {
         root.addView(AwUi.label(this, "History", 24f, true), full())
         historySummary = AwUi.label(this, "", 12f).apply { setTextColor(0xFF65758B.toInt()) }
         root.addView(historySummary, full().apply { bottomMargin = dp(12) })
-        historyAdapter = HistoryAdapter(this)
+        historyAdapter = HistoryAdapter(this, store)
         historyList = ListView(this).apply {
             adapter = historyAdapter; dividerHeight = 0; selector = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
             background = AwUi.surface(this@MainActivity, radius = 14, border = false); clipToOutline = true
+            setOnItemClickListener { _, _, position, _ ->
+                val (serial, measurement) = historyAdapter.getItem(position)
+                MeasurementNoteDialog(this@MainActivity, serial, measurement, store, ::updateHistory).show()
+            }
         }
         val empty = AwUi.label(this, "No measurements stored yet.", 15f).apply { setPadding(0, dp(24), 0, 0) }
         root.addView(empty)
@@ -204,7 +215,56 @@ class MainActivity : Activity() {
             setPadding(dp(2), dp(2), dp(2), dp(2))
             addView(historyList, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        return root
+        historyRefresh = PullRefreshView(this, { historyList.canScrollVertically(-1) }, ::refreshMeasurements).apply {
+            addView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }
+        return historyRefresh
+    }
+
+    private fun refreshMeasurements() {
+        if (manualRefreshInFlight) return
+        fun finish(message: String) {
+            manualRefreshInFlight = false
+            homeRefresh.isRefreshing = false; historyRefresh.isRefreshing = false
+            homeSection.refreshFromLocal(); updateHistory()
+            toast(message)
+        }
+        val session = store.session()
+        val serial = store.selectedDevice()
+        if (session == null || serial.isNullOrBlank() || store.authPaused()) {
+            finish("Reconnect using Web Login in Config")
+            return
+        }
+        manualRefreshInFlight = true
+        val baseUrl = store.baseUrl()
+        fun current() = store.session()?.accessToken == session.accessToken &&
+            store.selectedDevice() == serial && store.baseUrl() == baseUrl
+        kotlin.concurrent.thread(name = "AquaWizPullRefresh") {
+            var message = "Measurements refreshed"
+            try {
+                val api = AquaWizApi(baseUrl)
+                try {
+                    val latest = api.latestMeasurement(session, serial) { if (current()) store.saveDeviceSummary(serial, it) }
+                    if (current()) store.saveMeasurement(serial, latest)
+                } catch (e: AquaWizApi.ApiException) {
+                    if (e.status == 401 || e.status == 403) throw e
+                    message = "History refreshed; current status unavailable"
+                } catch (e: Exception) { message = "History refreshed; current status unavailable" }
+                // Refresh the full retained history, independent of the Home chart's selected range.
+                val readings = api.graphMeasurements(session, serial, Instant.now().minusSeconds(HomeDashboardView.Range.YEAR.seconds))
+                if (current()) store.saveMeasurements(serial, readings)
+            } catch (e: Exception) {
+                if (current()) {
+                    val authFailure = e is AquaWizApi.ApiException && (e.status == 401 || e.status == 403)
+                    if (authFailure) { store.setAuthPaused(true); store.clearNextPollEpochMs(); PollScheduler.cancel(this) }
+                    store.appendActivity("Pull refresh failed: " + (e.message ?: e.javaClass.simpleName))
+                    message = if (authFailure) "Session expired. Reconnect in Config" else "Refresh failed. Showing saved readings"
+                }
+            }
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed) finish(if (current()) message else "Connection changed; showing saved readings")
+            }
+        }
     }
 
     private fun buildConfigSection(): View {

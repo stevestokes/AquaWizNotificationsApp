@@ -2,8 +2,13 @@
     <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:navigationBarColor">#000000</item>
+        <item name="android:windowLightNavigationBar">false</item>
         <item name="android:statusBarColor">#FFFFFF</item>
         <item name="android:colorAccent">#0B5D72</item>
+    </style>
+    <style name="NoteSheetAnimation">
+        <item name="android:windowEnterAnimation">@anim/note_sheet_enter</item>
+        <item name="android:windowExitAnimation">@anim/note_sheet_exit</item>
     </style>
 </resources>

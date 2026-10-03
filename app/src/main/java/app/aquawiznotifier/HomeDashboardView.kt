@@ -92,7 +92,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         val todayValues = all.filter { it.measuredAt.atZone(ZoneId.systemDefault()).toLocalDate() == today }.mapNotNull { it.doseMl }
         dailyDose.text = if (todayValues.isEmpty()) "—" else "%.2f".format(todayValues.sum())
         val since = Instant.now().minusSeconds(selectedRange.seconds)
-        val displayed = HistoryMerge.merge(((if (pointsDevice == serial) points else emptyList()) + all)
+        val displayed = HistoryMerge.merge((all + (if (pointsDevice == serial) points else emptyList()))
             .map { serial to it }).map { it.second }.filter { !it.measuredAt.isBefore(since) }.sortedBy { it.measuredAt }
         chart.setOverview(selectedRange != Range.DAY)
         chart.setMeasurements(displayed, summary?.khLow, summary?.khHigh)
@@ -183,15 +183,8 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
             ranges.addView(button, LinearLayout.LayoutParams(0, dp(36), 1f).apply { setMargins(dp(2), 0, dp(2), 0) })
         }
         card.addView(ranges)
-        card.addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            syncStatus.textSize = 10f; syncStatus.maxLines = 2
-            addView(syncStatus, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(AwUi.button(context, "Refresh").apply {
-                textSize = 11f; setPadding(dp(8), 0, dp(8), 0)
-                setOnClickListener { refreshFromApi(force = true) }
-            }, LinearLayout.LayoutParams(dp(70), dp(36)).apply { leftMargin = dp(6) })
-        }, full())
+        syncStatus.textSize = 10f; syncStatus.maxLines = 2
+        card.addView(syncStatus, full().apply { topMargin = dp(6) })
         chart.contentDescription = "Measurement chart. Drag to inspect, pinch to zoom, double tap to reset. Left scale: dKH and pH. Right scale: delta-pH and dose in mL."
         root.addView(card, full())
         applyChartPreferences()
@@ -239,7 +232,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
                 post {
                     if (!current()) return@post
                     inFlight = false; refreshFromLocal()
-                    syncStatus.text = if (authFailure) "Session expired. Reconnect using Web Login in Config." else "Refresh failed. Showing saved readings. Tap Refresh to retry."
+                    syncStatus.text = if (authFailure) "Session expired. Reconnect using Web Login in Config." else "Refresh failed. Showing saved readings. Pull down to retry."
                 }
             }
         }

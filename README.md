@@ -221,8 +221,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 19
-versionName = "0.8.8"
+versionCode = 20
+versionName = "0.8.9"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -293,6 +293,10 @@ Bottom-menu icons are adapted from [Lucide](https://lucide.dev). Their license n
 ## 0.8.8 Compact bottom menu
 
 The top tabs are replaced by a compact floating white menu with Home, History, Status, and Config. The selected icon and label sit inside a blue circle. Status is hidden by default; enable it under Config → App → Show Status in bottom menu. The menu reserves space below the content, handles system-navigation and keyboard insets, and restores the selected section after screen rotation.
+
+## 0.8.9 Refresh and measurement notes
+
+Android's system navigation area is black with light controls, including on edge-to-edge screens. Pull down from the top of Home or History to fetch current measurements and retained history; the Home Refresh button is removed. Tap any history row to open a note editor that slides up from the bottom. Save adds or edits the note beneath that reading; saving an empty note removes it. Notes are stored only on the device and survive app restarts, signed updates, and server refreshes. They are matched by controller and measurement minute, so merged readings keep their notes. Cancel dismisses the editor without changing the saved note.
 
 
 ## 0.8.0 Home and chart update
