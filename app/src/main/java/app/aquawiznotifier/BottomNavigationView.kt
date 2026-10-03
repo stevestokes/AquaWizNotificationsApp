@@ -3,6 +3,8 @@ package app.aquawiznotifier
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.view.Gravity
@@ -36,6 +38,7 @@ class BottomNavigationView(context: Context, showStatus: Boolean, private val on
     }
     private var selectedSection = "home"
     private var bottomInset = 0
+    private val systemBarPaint = Paint().apply { color = Color.BLACK }
 
     init {
         setPadding(dp(12), dp(8), dp(12), dp(8))
@@ -121,6 +124,13 @@ class BottomNavigationView(context: Context, showStatus: Boolean, private val on
         if (bottomInset == inset) return
         bottomInset = inset
         setPadding(dp(12), dp(8), dp(12), dp(8) + inset)
+        invalidate()
+    }
+
+    override fun dispatchDraw(canvas: Canvas) {
+        super.dispatchDraw(canvas)
+        // Android 15/16 can make the navigation bar transparent; provide its black backing.
+        if (bottomInset > 0) canvas.drawRect(0f, (height - bottomInset).toFloat(), width.toFloat(), height.toFloat(), systemBarPaint)
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {

@@ -9,29 +9,36 @@ import android.widget.BaseAdapter
 import android.widget.LinearLayout
 import android.widget.TextView
 
-class HistoryAdapter(private val context: Context) : BaseAdapter() {
+class HistoryAdapter(private val context: Context, private val store: SecureStore) : BaseAdapter() {
     private var readings = emptyList<Pair<String, Measurement>>()
-    private data class Row(val date: TextView, val values: List<TextView>)
+    private var notes = emptyMap<String, String>()
+    private data class Row(val date: TextView, val values: List<TextView>, val note: TextView)
     fun submit(items: List<Pair<String, Measurement>>) {
-        if (readings == items) return
+        val updatedNotes = items.associate { (serial, m) -> HistoryMerge.readingKey(serial, m) to store.measurementNote(serial, m) }
+        if (readings == items && notes == updatedNotes) return
         readings = items
+        notes = updatedNotes
         notifyDataSetChanged()
     }
     override fun getCount() = readings.size
     override fun getItem(position: Int) = readings[position]
     override fun getItemId(position: Int) = position.toLong()
-    override fun isEnabled(position: Int) = false
+    override fun isEnabled(position: Int) = true
     override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
         val row = convertView as? LinearLayout ?: createRow()
         val holder = row.tag as Row
-        val (_, m) = readings[position]
+        val (serial, m) = readings[position]
+        val note = notes[HistoryMerge.readingKey(serial, m)].orEmpty()
+        holder.note.text = note
+        holder.note.visibility = if (note.isBlank()) View.GONE else View.VISIBLE
         holder.date.text = AppDates.format(m.measuredAt)
         val values = listOf("%.2f".format(m.kh), format(m.ph), format(m.phOpenAir),
             m.deltaPh?.let { "%+.2f".format(it) } ?: "—", format(m.doseMl))
         holder.values.zip(values).forEach { (view, value) -> view.text = value }
         row.setBackgroundColor(if (position % 2 == 0) Color.WHITE else 0xFFEEF4FB.toInt())
         row.contentDescription = holder.date.text.toString() + ", KH " + values[0] +
-            " dKH, pH " + values[1] + ", pH open air " + values[2] + ", delta pH " + values[3] + ", dose " + values[4] + " mL"
+            " dKH, pH " + values[1] + ", pH open air " + values[2] + ", delta pH " + values[3] + ", dose " + values[4] + " mL" +
+            if (note.isBlank()) ". Tap to add a note" else ". Note: $note. Tap to edit note"
         return row
     }
     private fun createRow() = LinearLayout(context).apply {
@@ -59,7 +66,13 @@ class HistoryAdapter(private val context: Context) : BaseAdapter() {
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             }
         })
-        tag = Row(date, values)
+        val note = AwUi.label(context, "", 13f).apply {
+            tag = "measurement_note"
+            setTextColor(0xFF58677B.toInt())
+            visibility = View.GONE
+        }
+        addView(note, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(9) })
+        tag = Row(date, values, note)
     }
     private fun format(value: Double?) = value?.let { "%.2f".format(it) } ?: "—"
     private fun dp(value: Int) = AwUi.dp(context, value)

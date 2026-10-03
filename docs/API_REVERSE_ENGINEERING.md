@@ -228,4 +228,12 @@ AquaWiz Notifier presents new measurements in an Alkatronic-inspired layout:
 n.nn dKH, n.nn pH
 ```
 
-Optional expanded values may include pH(O), ΔpH, and Dose (mL). Tapping a measurement notification attempts to launch the installed official AquaWiz app by discovering its launcher activity by visible app label. This behavior is separate from the AquaWiz cloud API and does not alter request payloads.
+Optional notification values may include pH(O), ΔpH, and Dose (mL). Measurement notifications open AquaWiz Notifier. This behavior is separate from the AquaWiz cloud API and does not alter request payloads.
+
+## In-app True Tank KH calibration
+
+Verified against the official Android APK with SHA-256 `62a0ee7721a652f06f1363684ec8760e75d74a8e8a88be0b32a673ec6cb97d84` (Hermes bytecode v96): `CalibrateKhModal` function 29661 reads `Number(allFields.field10) / 1000`; its submit function 29664 calls `changeConfig({serial, field10: (Number(trueTankKh) * 1000).toString()})`. `changeConfig` function 29656 posts to `/api/v1/KH/start-config`, combining `user`, `token.access_token`, and those two fields. Only `field10` is written. This is a configuration request, not an immediate hardware SYNC command.
+
+The official form uses decimal input, initializes from the server setting, and disables submission until the form is changed and valid. Zero disables calibration. The app's instructions tell the user to select `[SYNC]` on the KHA LCD for immediate application and allow about 30 minutes for calibration to finish. The notifier follows that sequence and does not modify historical measurement values.
+
+The probe widget (`TankKhPhProbeWidget`, function 29327) reads `latest_ph`: below 100 is a health percentage, 100 through 999 is healthy, and 1000 or higher is failure. `latest_ph1` supplies the actual pH value. The notifier displays healthy status alongside 100%, caps the percentage at 100, and never interprets failure codes as percentages.

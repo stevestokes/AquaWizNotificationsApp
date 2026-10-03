@@ -89,6 +89,11 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
         return MeasurementJson.graphMeasurements(raw, normalizedSerial)
     }
 
+    fun setTrueTankKh(session: Session, serial: String, value: java.math.BigDecimal) {
+        request("POST", baseUrl + KhCalibration.PATH, token = session.accessToken,
+            body = KhCalibration.body(session, serial, value).toString())
+    }
+
     private fun request(method: String, url: String, token: String? = null, body: String? = null): String {
         val conn = (URI(url).toURL().openConnection() as HttpURLConnection).apply {
             requestMethod = method
