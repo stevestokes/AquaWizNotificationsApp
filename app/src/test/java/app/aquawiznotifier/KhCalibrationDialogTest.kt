@@ -1,6 +1,7 @@
 package app.aquawiznotifier
 
 import android.app.Activity
+import android.os.Looper
 import android.view.View
 import android.widget.EditText
 import android.widget.TextView
@@ -9,6 +10,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.math.BigDecimal
 
@@ -22,6 +24,7 @@ class KhCalibrationDialogTest {
         val writes = mutableListOf<BigDecimal>()
         val sheet = KhCalibrationDialog(activity, null, load = { loaded = it }, submit = { value, done -> writes += value; saved = done })
         sheet.show()
+        shadowOf(Looper.getMainLooper()).idle()
         val root = sheet.window!!.decorView
         val input = root.findViewWithTag<EditText>("calibration_input")
         val button = root.findViewWithTag<View>("calibration_save")
@@ -45,7 +48,9 @@ class KhCalibrationDialogTest {
         var writes = 0
         val sheet = KhCalibrationDialog(activity, 8.0, load = { it(Result.failure(IllegalStateException("Offline"))) }, submit = { _, _ -> writes++ })
         sheet.show()
+        shadowOf(Looper.getMainLooper()).idle()
         val root = sheet.window!!.decorView
+        assertEquals("Offline", root.findViewWithTag<TextView>("calibration_status").text.toString())
         root.findViewWithTag<EditText>("calibration_input").setText("7.5")
         assertFalse(root.findViewWithTag<View>("calibration_save").isEnabled)
         root.findViewWithTag<View>("calibration_cancel").performClick()
