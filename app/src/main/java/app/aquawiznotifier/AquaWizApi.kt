@@ -13,6 +13,7 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 
 class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
+    data class TargetReadback(val summary: DeviceSummary?, val matches: Boolean, val error: Throwable? = null)
     companion object {
         const val GLOBAL_BASE = "https://server.aquawiz.net"
         const val CHINA_BASE = "https://server.aquawiz.cn"
@@ -97,6 +98,19 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
     fun setKhTarget(session: Session, serial: String, settings: KhTargetSettings) {
         request("POST", baseUrl + KhCalibration.PATH, token = session.accessToken,
             body = KhDeviceSettings.targetBody(session, serial, settings).toString())
+    }
+
+    /** A successful write acknowledges the request; it does not prove the controller applied it. */
+    fun setKhTargetAndReadBack(session: Session, serial: String, settings: KhTargetSettings): TargetReadback {
+        setKhTarget(session, serial, settings)
+        return try {
+            val summary = DeviceSummaryJson.parse(rawAllFields(session, serial), serial)
+                ?: error("Unable to identify this controller's settings after saving")
+            TargetReadback(summary, KhDeviceSettings.matchesTarget(summary, settings))
+        } catch (error: Exception) {
+            // Never retry a write that was already accepted, even if readback fails.
+            TargetReadback(null, false, error)
+        }
     }
 
     fun setKhDosing(session: Session, serial: String, settings: KhDosingSettings, current: DeviceSummary) {

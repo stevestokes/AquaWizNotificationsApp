@@ -318,20 +318,31 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         }
         KhSettingsDialog(context, section, serial,
             load = { done -> thread(name = "AquaWizSettingsRead") {
-                val result = runCatching { read().also { store.saveDeviceSummary(serial, it) } }
+                val result = runCatching { read().also {
+                    store.saveDeviceSummary(serial, it)
+                    if (section == KhSettingsSection.TARGET) store.appendActivity("KH schedule read from AquaWiz: field13=${it.measurementSchedule ?: "missing"}")
+                } }
                 result.exceptionOrNull()?.let(::pauseIfExpired)
                 post { done(result) }
             } },
             submit = { target, dosing, done -> thread(name = "AquaWizSettingsWrite") {
+                var saveMessage = "Settings saved. Select SYNC on the KHA to apply now."
                 val result = runCatching {
                     // Read again before saving so packed dosing calibration digits are current.
                     val summary = read()
                     val api = AquaWizApi(baseUrl)
                     val updated = if (target != null) {
-                        api.setKhTarget(session, serial, target)
                         val fields = KhDeviceSettings.targetBody(session, serial, target)
-                        summary.copy(khTarget = target.target.toDouble(), khDeviation = target.deviation.toDouble(),
-                            measurementSchedule = fields.getString("field13"))
+                        val receipt = api.setKhTargetAndReadBack(session, serial, target)
+                        receipt.error?.let(::pauseIfExpired)
+                        saveMessage = when {
+                            receipt.matches -> "AquaWiz returned the saved settings. The KHA applies them at its next measurement or when you select SYNC."
+                            receipt.summary != null -> "Request accepted. AquaWiz still returns different settings. Reopen KH Target after the next measurement or KHA SYNC to check again."
+                            else -> "Request accepted, but settings could not be read back. Reopen KH Target to check before applying again."
+                        }
+                        if (current()) store.appendActivity("KH target request accepted: requested field13=${fields.getString("field13")}; returned field13=${receipt.summary?.measurementSchedule ?: "unavailable"}; target settings match=${receipt.matches}. This does not confirm hardware SYNC.")
+                        // Keep actual server values, never replace them with the submitted form.
+                        receipt.summary ?: summary
                     } else {
                         val value = requireNotNull(dosing)
                         val fields = KhDeviceSettings.dosingBody(session, serial, value, summary)
@@ -341,7 +352,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
                     }
                     if (current()) {
                         store.saveDeviceSummary(serial, updated)
-                        store.appendActivity(if (target != null) "KH target settings saved" else "KH dosing settings saved")
+                        if (target == null) store.appendActivity("KH dosing settings saved")
                     }
                 }
                 result.exceptionOrNull()?.let(::pauseIfExpired)
@@ -349,7 +360,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
                     done(result)
                     if (result.isSuccess && current()) {
                         refreshFromLocal()
-                        Toast.makeText(context, "Settings saved. Select SYNC on the KHA to apply now.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, saveMessage, Toast.LENGTH_LONG).show()
                     }
                 }
             } }).show()

@@ -32,7 +32,7 @@ class KhSettingsDialog(context: Context, private val section: KhSettingsSection,
         if (section == KhSettingsSection.TARGET) {
             decimal("target", "Target KH", "dKH", "If lower, then dose KH rising solution", R.drawable.ic_kh_target)
             decimal("deviation", "Notify If Out of Spec Through Email", "dKH", null, R.drawable.ic_kh_email)
-            selector(body, "interval", "Measurement Interval", 1..6, true, "Set 1 hour for accurate measurement")
+            selector(body, "interval", "Measurement Interval", 1..6, true, "Controller measurement interval in hours. An already scheduled measurement may still run before the new setting takes effect.")
             body.addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 for ((key, title) in listOf("from" to "Sleep Time Period From", "to" to "Sleep Time Period To")) {
@@ -44,6 +44,7 @@ class KhSettingsDialog(context: Context, private val section: KhSettingsSection,
                     })
                 }
             }, full())
+            body.addView(AwUi.label(context, "Sleep hours use the KHA controller's clock. Changing your phone's timezone does not change these hours.", 12f), full().apply { topMargin = dp(8) })
         } else {
             decimal("remaining", "KH Dosing Solution Remaining", "mL", "It is reduced after dosing", R.drawable.ic_kh_dose)
             decimal("amount", "Amount to Increase 1 dKH", "mL", "Tank size and concentration of KH rising solution determine this value", R.drawable.ic_kh_drop)

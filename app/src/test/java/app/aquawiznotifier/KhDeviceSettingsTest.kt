@@ -70,4 +70,51 @@ class KhDeviceSettingsTest {
             assertEquals(3, bodies.size)
         } finally { server.stop(0) }
     }
+    @Test fun intervalAndSleepEncodingIsIndependentOfPhoneTimezone() {
+        val original = java.util.TimeZone.getDefault()
+        try {
+            for (zone in listOf("America/Detroit", "UTC", "Asia/Shanghai")) {
+                java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone(zone))
+                for (interval in 1..6) {
+                    val requested = target.copy(interval = interval, sleepFrom = 0, sleepTo = 7)
+                    val packed = KhDeviceSettings.targetBody(session, "KH1-A", requested).getString("field13")
+                    assertEquals("${interval}0007", packed)
+                    assertTrue(KhDeviceSettings.matchesTarget(summary.copy(measurementSchedule = packed), requested))
+                }
+            }
+        } finally { java.util.TimeZone.setDefault(original) }
+    }
+    @Test fun readbackDistinguishesMatchingPendingAndUnavailableSettingsWithoutRepeatingWrites() {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        var writes = 0
+        var readStatus = 200
+        var schedule = "32207"
+        server.createContext(KhCalibration.PATH) { exchange ->
+            exchange.requestBody.use { it.readBytes() }; writes++
+            val bytes = "ok".toByteArray(); exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        server.createContext("/api/v1/KH/KH1-A/all_field") { exchange ->
+            val bytes = """{"field8":"8500","field15":"500","field13":"$schedule"}""".toByteArray()
+            exchange.sendResponseHeaders(readStatus, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        server.start()
+        try {
+            val api = AquaWizApi("http://127.0.0.1:${server.address.port}")
+            val requested = target.copy(interval = 3)
+            val matching = api.setKhTargetAndReadBack(session, "KH1-A", requested)
+            assertTrue(matching.matches); assertEquals("32207", matching.summary!!.measurementSchedule)
+            schedule = "12207"
+            val pending = api.setKhTargetAndReadBack(session, "KH1-A", requested)
+            assertFalse(pending.matches); assertEquals("12207", pending.summary!!.measurementSchedule)
+            readStatus = 403
+            val unavailable = api.setKhTargetAndReadBack(session, "KH1-A", requested)
+            assertFalse(unavailable.matches); assertNull(unavailable.summary)
+            assertEquals(403, (unavailable.error as AquaWizApi.ApiException).status)
+            assertEquals(3, writes)
+            assertFalse(KhDeviceSettings.matchesTarget(summary.copy(measurementSchedule = null), requested))
+            assertFalse(KhDeviceSettings.matchesTarget(summary.copy(khTarget = 8.6, measurementSchedule = "32207"), requested))
+        } finally { server.stop(0) }
+    }
 }
