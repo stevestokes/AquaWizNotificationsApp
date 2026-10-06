@@ -4,12 +4,17 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - main
+    paths:
+      - app/build.gradle.kts
 
 permissions:
   contents: write
 
 jobs:
   release:
+    if: github.ref_type == 'tag' || startsWith(github.event.head_commit.message, 'Release v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,24 +57,40 @@ jobs:
         run: |
           ./gradlew testDebugUnitTest assembleRelease
           test -f app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify app/build/outputs/apk/release/app-release.apk
+
+      - name: Determine release tag
+        run: |
+          VERSION=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts)
+          test -n "$VERSION"
+          RELEASE_TAG="v$VERSION"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            test "$GITHUB_REF_NAME" = "$RELEASE_TAG"
+          fi
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
 
       - name: Prepare release assets
         run: |
           mkdir -p dist
           cp app/build/outputs/apk/release/app-release.apk dist/AquaWizNotifier.apk
-          cp app/build/outputs/apk/release/app-release.apk "dist/AquaWizNotifier-$GITHUB_REF_NAME.apk"
+          cp app/build/outputs/apk/release/app-release.apk "dist/AquaWizNotifier-$RELEASE_TAG.apk"
 
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           STABLE="dist/AquaWizNotifier.apk"
-          VERSIONED="dist/AquaWizNotifier-$GITHUB_REF_NAME.apk"
+          VERSIONED="dist/AquaWizNotifier-$RELEASE_TAG.apk"
 
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$STABLE" "$VERSIONED" --clobber
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$STABLE" "$VERSIONED" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "$STABLE" "$VERSIONED" \
-              --title "AquaWiz Notifier $GITHUB_REF_NAME" \
+            gh release create "$RELEASE_TAG" "$STABLE" "$VERSIONED" \
+              --title "AquaWiz Notifier $RELEASE_TAG" \
+              --target "$GITHUB_SHA" \
               --generate-notes
           fi
+
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/aquawiz-release.jks"

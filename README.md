@@ -221,8 +221,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 21
-versionName = "0.8.10"
+versionCode = 22
+versionName = "0.8.11"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -325,3 +325,7 @@ Tap KH Target or KH Dosing, including the card icons, to open an in-app bottom s
 - **KH Dosing:** solution remaining, mL to increase 1 dKH, maximum mL per hour (0 stops dosing), and low-solution email threshold. Existing packed dosing calibration digits are preserved for controller models that use them.
 
 New settings take effect at the next measurement. Select **[SYNC]** on the KHA LCD to update immediately. Request contracts are checked against the official APK and a mock HTTP server; live controller writes are not part of automated tests.
+
+## 0.8.11 Measurement ingestion fixes
+
+Graph statistics can no longer become measurement rows. Future-dated readings are rejected, and cached future readings and polling anchors are repaired on launch. KH Target saves read back server settings instead of assuming submitted values were applied. Temporary investigation logs have been removed.
