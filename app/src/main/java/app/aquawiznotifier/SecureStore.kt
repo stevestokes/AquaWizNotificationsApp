@@ -174,7 +174,7 @@ class SecureStore(context: Context) {
         synchronized(historyLock) {
         if (measurements.isEmpty()) return
 
-        val merged = HistoryMerge.merge(measurements.map { serial to it } + measurementHistory())
+        val merged = HistoryMerge.merge(measurements.filter { MeasurementValidity.isNotFuture(it) }.map { serial to it } + measurementHistory())
 
         val updated = JSONArray()
         merged.forEach { (deviceSerial, measurement) ->
@@ -196,12 +196,22 @@ class SecureStore(context: Context) {
                 add(parsed)
             }
         }
-        val merged = HistoryMerge.merge(parsed)
+        val merged = HistoryMerge.merge(parsed.filter { MeasurementValidity.isNotFuture(it.second) })
         // Repair already-saved duplicate/partial rows on the first read after upgrade.
         if (merged != parsed) {
             val updated = JSONArray()
             merged.forEach { (serial, measurement) -> updated.put(measurementJson(serial, measurement)) }
             prefs.edit().putString("measurement_history", updated.toString()).apply()
+            if (parsed.any { !MeasurementValidity.isNotFuture(it.second) }) {
+                appendActivity("Removed future-dated cached readings from History")
+                if (lastMeasurementEpochMs()?.let { it > Instant.now().plusSeconds(300).toEpochMilli() } == true) {
+                    prefs.edit().remove("last_measurement_ms").remove("last_fingerprint").remove("last_kh").remove("next_poll_ms").apply()
+                    merged.firstOrNull { it.first.equals(selectedDevice(), true) }?.second?.let {
+                        setLastMeasurementEpochMs(it.measuredAt.toEpochMilli()); setLastFingerprint(it.fingerprint); setLastKh(it.kh)
+                    }
+                }
+                if (merged.isEmpty()) prefs.edit().remove("last_measurement_json").apply()
+            }
             merged.firstOrNull()?.let { (serial, measurement) -> saveLatestMeasurement(serial, measurement) }
         }
         merged
@@ -212,7 +222,7 @@ class SecureStore(context: Context) {
         history.firstOrNull { it.first.equals(selectedDevice(), true) }?.let { return it }
         history.firstOrNull()?.let { return it }
         val raw = prefs.getString("last_measurement_json", null) ?: return null
-        return runCatching { parseMeasurementJson(JSONObject(raw)) }.getOrNull()
+        return runCatching { parseMeasurementJson(JSONObject(raw)) }.getOrNull()?.takeIf { MeasurementValidity.isNotFuture(it.second) }
     }
 
     private fun saveLatestMeasurement(serial: String, measurement: Measurement) {

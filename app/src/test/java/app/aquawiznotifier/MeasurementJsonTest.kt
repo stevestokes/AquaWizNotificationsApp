@@ -7,6 +7,32 @@ import org.junit.Test
 import java.time.Instant
 
 class MeasurementJsonTest {
+    private val reproductionNow = Instant.parse("2026-10-06T04:39:00Z")
+    @Test fun graphSummaryCannotBecomeEightAmMeasurement() {
+        val raw = """{"results":[["2026-10-06T04:34:00Z",{"field22":8312,"field27":8400,"field28":8340,"field26":0}]],
+            "summary":{"date":"2026-10-06T12:00:00Z","field22":8181,"field27":8463.5,"field28":8350.5,"field26":0}}"""
+        val result = MeasurementJson.findLatest(raw, "KH-A", now = reproductionNow)!!
+        assertEquals(8.312, result.kh, 0.00001)
+        assertEquals(Instant.parse("2026-10-06T04:34:00Z"), result.measuredAt)
+        // Even after 8 AM, summary/metadata objects must never be promoted to readings.
+        assertEquals(result, MeasurementJson.findLatest(raw, "KH-A", now = reproductionNow.plusSeconds(12 * 3600)))
+    }
+    @Test fun futureResultsRowIsRejectedWithoutChangingTimestampOrValues() {
+        val raw = """{"results":[["2026-10-06T04:34:00Z",{"field22":8312}],
+            ["2026-10-06T12:00:00Z",{"field22":8181,"field27":8463.5,"field28":8350.5}]]}"""
+        val logs = mutableListOf<String>()
+        val result = MeasurementJson.graphMeasurements(raw, "KH-A", reproductionNow, logs::add)
+        assertEquals(1, result.size); assertEquals(8.312, result.single().kh, 0.00001)
+        assertEquals(1, logs.size); org.junit.Assert.assertTrue(logs.single().contains("Rejected future graph row"))
+    }
+    @Test fun currentFieldsRequireTheirOwnMeasurementTimestampAndRejectFuture() {
+        val invalid = """{"latest_kh":8181,"date":"2026-10-06T12:00:00Z"}"""
+        assertNull(MeasurementJson.findLatest(invalid, currentOnly = true, now = reproductionNow))
+        val future = """{"latest_kh":8181,"latest_time":"2026-10-06T12:00:00Z"}"""
+        assertNull(MeasurementJson.findLatest(future, currentOnly = true, now = reproductionNow))
+        val current = """{"latest_kh":8312,"latest_time":"2026-10-06T04:34:00Z"}"""
+        assertEquals(8.312, MeasurementJson.findLatest(current, currentOnly = true, now = reproductionNow)!!.kh, 0.00001)
+    }
     @Test fun selectsConfiguredDeviceFromAccountLevelPayload() {
         val raw = """
             {
