@@ -49,6 +49,11 @@ object KhDeviceSettings {
             .put("field15", plain(value.deviation.multiply(BigDecimal(1000))))
             .put("field13", "${value.interval}${value.sleepFrom.toString().padStart(2, '0')}${value.sleepTo.toString().padStart(2, '0')}")
     }
+    fun matchesTarget(summary: DeviceSummary, requested: KhTargetSettings): Boolean {
+        val actual = runCatching { target(summary) }.getOrNull() ?: return false
+        return actual.target.compareTo(requested.target) == 0 && actual.deviation.compareTo(requested.deviation) == 0 &&
+            actual.interval == requested.interval && actual.sleepFrom == requested.sleepFrom && actual.sleepTo == requested.sleepTo
+    }
     fun dosingBody(session: Session, serial: String, value: KhDosingSettings, current: DeviceSummary): JSONObject {
         validate(value, serial)
         fun encoded(amount: BigDecimal, raw: String?, divisor: Long, width: Int): String {

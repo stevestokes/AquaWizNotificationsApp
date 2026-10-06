@@ -12,7 +12,8 @@ import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
 
-class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
+class AquaWizApi(private val baseUrl: String = GLOBAL_BASE, private val diagnostic: (String) -> Unit = {}) {
+    data class TargetReadback(val summary: DeviceSummary?, val matches: Boolean, val error: Throwable? = null)
     companion object {
         const val GLOBAL_BASE = "https://server.aquawiz.net"
         const val CHINA_BASE = "https://server.aquawiz.cn"
@@ -33,7 +34,11 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
         val directFailure: Exception? = try {
             val raw = rawAllFields(session, normalizedSerial)
             DeviceSummaryJson.parse(raw, normalizedSerial)?.let { onSummary?.invoke(it) }
-            MeasurementJson.findLatest(raw, normalizedSerial, requirePreferredSerialWhenAmbiguous = true)?.let { return it }
+            MeasurementJson.findLatest(raw, normalizedSerial, requirePreferredSerialWhenAmbiguous = true, currentOnly = true)?.let {
+                diagnostic("Current measurement: ${it.measuredAt}, ${it.kh} dKH")
+                return it
+            }
+            diagnostic("Current fields did not contain a valid non-future measurement; using graph results")
             ApiException(200, "AquaWiz all_field response did not contain a current KH value for device $normalizedSerial")
         } catch (e: ApiException) {
             if (e.status == 401 || e.status == 403) throw e
@@ -44,7 +49,7 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
 
         try {
             val raw = rawGraph(session, normalizedSerial)
-            return MeasurementJson.findLatest(raw, normalizedSerial, requirePreferredSerialWhenAmbiguous = false)
+            return MeasurementJson.graphMeasurements(raw, normalizedSerial, diagnostic = diagnostic).lastOrNull()
                 ?: throw ApiException(200, "Connected, but no KH measurement could be identified in the AquaWiz graph response")
         } catch (e: ApiException) {
             if (e.status == 401 || e.status == 403) throw e
@@ -86,7 +91,7 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
     fun graphMeasurements(session: Session, serial: String, since: Instant): List<Measurement> {
         val normalizedSerial = serial.trim().uppercase()
         val raw = rawGraph(session, normalizedSerial, since)
-        return MeasurementJson.graphMeasurements(raw, normalizedSerial)
+        return MeasurementJson.graphMeasurements(raw, normalizedSerial, diagnostic = diagnostic)
     }
 
     fun setTrueTankKh(session: Session, serial: String, value: java.math.BigDecimal) {
@@ -97,6 +102,19 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
     fun setKhTarget(session: Session, serial: String, settings: KhTargetSettings) {
         request("POST", baseUrl + KhCalibration.PATH, token = session.accessToken,
             body = KhDeviceSettings.targetBody(session, serial, settings).toString())
+    }
+
+    /** A successful write acknowledges the request; it does not prove the controller applied it. */
+    fun setKhTargetAndReadBack(session: Session, serial: String, settings: KhTargetSettings): TargetReadback {
+        setKhTarget(session, serial, settings)
+        return try {
+            val summary = DeviceSummaryJson.parse(rawAllFields(session, serial), serial)
+                ?: error("Unable to identify this controller's settings after saving")
+            TargetReadback(summary, KhDeviceSettings.matchesTarget(summary, settings))
+        } catch (error: Exception) {
+            // Never retry a write that was already accepted, even if readback fails.
+            TargetReadback(null, false, error)
+        }
     }
 
     fun setKhDosing(session: Session, serial: String, settings: KhDosingSettings, current: DeviceSummary) {
@@ -160,12 +178,17 @@ object MeasurementJson {
 
     private data class Candidate(val measurement: Measurement, val serial: String?)
 
-    fun graphMeasurements(raw: String, preferredSerial: String? = null): List<Measurement> {
+    fun graphMeasurements(raw: String, preferredSerial: String? = null, now: Instant = Instant.now(), diagnostic: (String) -> Unit = {}): List<Measurement> {
         val root = runCatching { JSONTokener(raw).nextValue() }.getOrNull() ?: return emptyList()
         val found = mutableListOf<Candidate>()
         extractOfficialGraphRows(root, preferredSerial, found)
         return found
             .map { it.measurement }
+            .filter {
+                MeasurementValidity.isNotFuture(it, now).also { valid ->
+                    if (!valid) diagnostic("Rejected future graph row: ${it.measuredAt}, ${it.kh} dKH")
+                }
+            }
             .distinctBy { it.fingerprint }
             .sortedBy { it.measuredAt }
     }
@@ -174,11 +197,17 @@ object MeasurementJson {
         raw: String,
         preferredSerial: String? = null,
         requirePreferredSerialWhenAmbiguous: Boolean = false,
+        currentOnly: Boolean = false,
+        now: Instant = Instant.now(),
     ): Measurement? {
         val root = runCatching { JSONTokener(raw).nextValue() }.getOrNull() ?: return null
+        // Graph responses contain statistics too. Only results rows are measurements.
+        if (!currentOnly && (root as? JSONObject)?.has("results") == true) {
+            return graphMeasurements(raw, preferredSerial, now).lastOrNull()
+        }
         val found = mutableListOf<Candidate>()
-        extractOfficialGraphRows(root, preferredSerial, found)
-        walk(root, found, inheritedSerial = null)
+        walk(root, found, inheritedSerial = null, currentOnly = currentOnly)
+        found.removeAll { !MeasurementValidity.isNotFuture(it.measurement, now) }
         if (found.isEmpty()) return null
 
         if (!preferredSerial.isNullOrBlank()) {
@@ -208,6 +237,9 @@ object MeasurementJson {
     private fun extractOfficialGraphRows(root: Any?, preferredSerial: String?, out: MutableList<Candidate>) {
         val results = (root as? JSONObject)?.optJSONArray("results") ?: return
         for (i in 0 until results.length()) {
+            results.optJSONObject(i)?.let { row ->
+                if (row.has("field22")) parseObject(row)?.let { parsed -> out += Candidate(parsed.copy(rawId = "graph:" + parsed.measuredAt.toEpochMilli()), preferredSerial) }
+            }
             val row = results.optJSONArray(i) ?: continue
             if (row.length() < 2) continue
             val measuredAt = parseInstant(row.opt(0)) ?: continue
@@ -258,22 +290,22 @@ object MeasurementJson {
         return scaled.takeIf { it >= 0.0 }
     }
 
-    private fun walk(v: Any?, out: MutableList<Candidate>, inheritedSerial: String?) {
+    private fun walk(v: Any?, out: MutableList<Candidate>, inheritedSerial: String?, currentOnly: Boolean = false) {
         when (v) {
-            is JSONArray -> for (i in 0 until v.length()) walk(v.opt(i), out, inheritedSerial)
+            is JSONArray -> for (i in 0 until v.length()) walk(v.opt(i), out, inheritedSerial, currentOnly)
             is JSONObject -> {
                 val localSerial = string(v, serialKeys) ?: inheritedSerial
-                parseObject(v)?.let { out += Candidate(it, localSerial) }
+                if (!currentOnly || v.has("latest_kh") || v.has("latestKh")) parseObject(v, currentOnly)?.let { out += Candidate(it, localSerial) }
                 val it = v.keys()
-                while (it.hasNext()) walk(v.opt(it.next()), out, localSerial)
+                while (it.hasNext()) walk(v.opt(it.next()), out, localSerial, currentOnly)
             }
         }
     }
 
-    private fun parseObject(o: JSONObject): Measurement? {
+    private fun parseObject(o: JSONObject, currentOnly: Boolean = false): Measurement? {
         val kh = number(o, khKeys)?.let { if (it > 20.0) it / 1000.0 else it } ?: khFromField22(o.opt("field22")) ?: inferKhFromGraphObject(o) ?: return null
         if (kh !in 2.0..20.0) return null
-        val whenAt = instant(o, timeKeys) ?: return null
+        val whenAt = instant(o, if (currentOnly) listOf("latest_time", "latestTime") else timeKeys) ?: return null
         val id = string(o, idKeys)
         val ph = number(o, phKeys)?.let { if (it > 12.0) it / 1000.0 else it }?.takeIf { it in 4.0..12.0 } ?: phFromField27(o.opt("field27"))
         val phOpenAir = number(o, listOf("phOpenAir", "ph_open_air", "phO", "ph_o"))

@@ -67,6 +67,8 @@ class MainActivity : Activity() {
         if (Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false)
         SystemNavigation.configure(window)
         store = SecureStore(this)
+        val hadFutureAnchor = store.lastMeasurementEpochMs()?.let { it > Instant.now().plusSeconds(300).toEpochMilli() } == true
+        store.measurementHistory()
         store.migrateWebLogin()
         Notifier.ensureChannel(this)
         requestNotifications()
@@ -75,6 +77,7 @@ class MainActivity : Activity() {
         selectInitialSection(savedInstanceState?.getString("current_section"))
         if ((store.session()?.accessToken.isNullOrBlank() || store.authPaused()) && savedInstanceState == null) rootLogin()
         UpdateChecker.schedule(this)
+        if (hadFutureAnchor && store.session() != null && !store.authPaused()) PollScheduler.start(this, true)
     }
 
     override fun onResume() {
@@ -242,7 +245,7 @@ class MainActivity : Activity() {
         kotlin.concurrent.thread(name = "AquaWizPullRefresh") {
             var message = "Measurements refreshed"
             try {
-                val api = AquaWizApi(baseUrl)
+                val api = AquaWizApi(baseUrl, store::appendActivity)
                 try {
                     val latest = api.latestMeasurement(session, serial) { if (current()) store.saveDeviceSummary(serial, it) }
                     if (current()) store.saveMeasurement(serial, latest)
@@ -447,7 +450,7 @@ class MainActivity : Activity() {
         connectButton.isEnabled = false
         Thread {
             try {
-                val api = AquaWizApi(store.baseUrl())
+                val api = AquaWizApi(store.baseUrl(), store::appendActivity)
                 val session = Session(
                     username = usernameValue,
                     accessToken = tokenValue,
