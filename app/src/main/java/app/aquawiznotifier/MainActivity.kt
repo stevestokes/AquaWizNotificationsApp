@@ -245,7 +245,7 @@ class MainActivity : Activity() {
         kotlin.concurrent.thread(name = "AquaWizPullRefresh") {
             var message = "Measurements refreshed"
             try {
-                val api = AquaWizApi(baseUrl, store::appendActivity)
+                val api = AquaWizApi(baseUrl)
                 try {
                     val latest = api.latestMeasurement(session, serial) { if (current()) store.saveDeviceSummary(serial, it) }
                     if (current()) store.saveMeasurement(serial, latest)
@@ -450,7 +450,7 @@ class MainActivity : Activity() {
         connectButton.isEnabled = false
         Thread {
             try {
-                val api = AquaWizApi(store.baseUrl(), store::appendActivity)
+                val api = AquaWizApi(store.baseUrl())
                 val session = Session(
                     username = usernameValue,
                     accessToken = tokenValue,

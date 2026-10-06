@@ -12,7 +12,7 @@ import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
 
-class AquaWizApi(private val baseUrl: String = GLOBAL_BASE, private val diagnostic: (String) -> Unit = {}) {
+class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
     data class TargetReadback(val summary: DeviceSummary?, val matches: Boolean, val error: Throwable? = null)
     companion object {
         const val GLOBAL_BASE = "https://server.aquawiz.net"
@@ -35,10 +35,8 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE, private val diagnost
             val raw = rawAllFields(session, normalizedSerial)
             DeviceSummaryJson.parse(raw, normalizedSerial)?.let { onSummary?.invoke(it) }
             MeasurementJson.findLatest(raw, normalizedSerial, requirePreferredSerialWhenAmbiguous = true, currentOnly = true)?.let {
-                diagnostic("Current measurement: ${it.measuredAt}, ${it.kh} dKH")
                 return it
             }
-            diagnostic("Current fields did not contain a valid non-future measurement; using graph results")
             ApiException(200, "AquaWiz all_field response did not contain a current KH value for device $normalizedSerial")
         } catch (e: ApiException) {
             if (e.status == 401 || e.status == 403) throw e
@@ -49,7 +47,7 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE, private val diagnost
 
         try {
             val raw = rawGraph(session, normalizedSerial)
-            return MeasurementJson.graphMeasurements(raw, normalizedSerial, diagnostic = diagnostic).lastOrNull()
+            return MeasurementJson.graphMeasurements(raw, normalizedSerial).lastOrNull()
                 ?: throw ApiException(200, "Connected, but no KH measurement could be identified in the AquaWiz graph response")
         } catch (e: ApiException) {
             if (e.status == 401 || e.status == 403) throw e
@@ -91,7 +89,7 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE, private val diagnost
     fun graphMeasurements(session: Session, serial: String, since: Instant): List<Measurement> {
         val normalizedSerial = serial.trim().uppercase()
         val raw = rawGraph(session, normalizedSerial, since)
-        return MeasurementJson.graphMeasurements(raw, normalizedSerial, diagnostic = diagnostic)
+        return MeasurementJson.graphMeasurements(raw, normalizedSerial)
     }
 
     fun setTrueTankKh(session: Session, serial: String, value: java.math.BigDecimal) {
@@ -178,17 +176,13 @@ object MeasurementJson {
 
     private data class Candidate(val measurement: Measurement, val serial: String?)
 
-    fun graphMeasurements(raw: String, preferredSerial: String? = null, now: Instant = Instant.now(), diagnostic: (String) -> Unit = {}): List<Measurement> {
+    fun graphMeasurements(raw: String, preferredSerial: String? = null, now: Instant = Instant.now()): List<Measurement> {
         val root = runCatching { JSONTokener(raw).nextValue() }.getOrNull() ?: return emptyList()
         val found = mutableListOf<Candidate>()
         extractOfficialGraphRows(root, preferredSerial, found)
         return found
             .map { it.measurement }
-            .filter {
-                MeasurementValidity.isNotFuture(it, now).also { valid ->
-                    if (!valid) diagnostic("Rejected future graph row: ${it.measuredAt}, ${it.kh} dKH")
-                }
-            }
+            .filter { MeasurementValidity.isNotFuture(it, now) }
             .distinctBy { it.fingerprint }
             .sortedBy { it.measuredAt }
     }

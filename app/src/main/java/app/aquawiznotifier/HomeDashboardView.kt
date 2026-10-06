@@ -212,7 +212,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         thread(name = "AquaWizHome") {
             var summaryError: String? = null
             try {
-                val api = AquaWizApi(baseUrl, store::appendActivity)
+                val api = AquaWizApi(baseUrl)
                 try {
                     val latest = api.latestMeasurement(session, serial) { if (current()) store.saveDeviceSummary(serial, it) }
                     if (current()) store.saveMeasurement(serial, latest)
@@ -260,7 +260,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
                 thread(name = "AquaWizCalibrationRead") {
                     val result = runCatching {
                         check(current() && !store.authPaused()) { "Connection changed. Reconnect in Config" }
-                        val summary = DeviceSummaryJson.parse(AquaWizApi(baseUrl, store::appendActivity).rawAllFields(session, serial), serial)
+                        val summary = DeviceSummaryJson.parse(AquaWizApi(baseUrl).rawAllFields(session, serial), serial)
                             ?: error("Unable to identify this controller's calibration setting")
                         val value = summary.trueTankKh ?: error("AquaWiz did not return the current calibration setting")
                         check(current()) { "Connection changed. Reopen calibration" }
@@ -275,7 +275,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
                 thread(name = "AquaWizCalibrationWrite") {
                     val result = runCatching {
                         check(current() && !store.authPaused()) { "Connection changed. Reconnect in Config" }
-                        AquaWizApi(baseUrl, store::appendActivity).setTrueTankKh(session, serial, value)
+                        AquaWizApi(baseUrl).setTrueTankKh(session, serial, value)
                         if (current()) {
                             store.deviceSummary(serial)?.let { store.saveDeviceSummary(serial, it.copy(trueTankKh = value.toDouble())) }
                             store.appendActivity("True tank KH calibration saved: " + value.stripTrailingZeros().toPlainString() + " dKH")
@@ -306,7 +306,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
             store.selectedDevice() == serial && store.baseUrl() == baseUrl
         fun read(): DeviceSummary {
             check(current() && !store.authPaused()) { "Connection changed. Reconnect in Config" }
-            val summary = DeviceSummaryJson.parse(AquaWizApi(baseUrl, store::appendActivity).rawAllFields(session, serial), serial)
+            val summary = DeviceSummaryJson.parse(AquaWizApi(baseUrl).rawAllFields(session, serial), serial)
                 ?: error("Unable to identify this controller's settings")
             check(current() && !store.authPaused()) { "Connection changed. Reopen settings" }
             return summary
@@ -320,7 +320,6 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
             load = { done -> thread(name = "AquaWizSettingsRead") {
                 val result = runCatching { read().also {
                     store.saveDeviceSummary(serial, it)
-                    if (section == KhSettingsSection.TARGET) store.appendActivity("KH schedule read from AquaWiz: field13=${it.measurementSchedule ?: "missing"}")
                 } }
                 result.exceptionOrNull()?.let(::pauseIfExpired)
                 post { done(result) }
@@ -330,9 +329,8 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
                 val result = runCatching {
                     // Read again before saving so packed dosing calibration digits are current.
                     val summary = read()
-                    val api = AquaWizApi(baseUrl, store::appendActivity)
+                    val api = AquaWizApi(baseUrl)
                     val updated = if (target != null) {
-                        val fields = KhDeviceSettings.targetBody(session, serial, target)
                         val receipt = api.setKhTargetAndReadBack(session, serial, target)
                         receipt.error?.let(::pauseIfExpired)
                         saveMessage = when {
@@ -340,7 +338,6 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
                             receipt.summary != null -> "Request accepted. AquaWiz still returns different settings. Reopen KH Target after the next measurement or KHA SYNC to check again."
                             else -> "Request accepted, but settings could not be read back. Reopen KH Target to check before applying again."
                         }
-                        if (current()) store.appendActivity("KH target request accepted: requested field13=${fields.getString("field13")}; returned field13=${receipt.summary?.measurementSchedule ?: "unavailable"}; target settings match=${receipt.matches}. This does not confirm hardware SYNC.")
                         // Keep actual server values, never replace them with the submitted form.
                         receipt.summary ?: summary
                     } else {
@@ -352,7 +349,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
                     }
                     if (current()) {
                         store.saveDeviceSummary(serial, updated)
-                        if (target == null) store.appendActivity("KH dosing settings saved")
+                        store.appendActivity(if (target != null) "KH target request accepted" else "KH dosing settings saved")
                     }
                 }
                 result.exceptionOrNull()?.let(::pauseIfExpired)

@@ -20,10 +20,8 @@ class MeasurementJsonTest {
     @Test fun futureResultsRowIsRejectedWithoutChangingTimestampOrValues() {
         val raw = """{"results":[["2026-10-06T04:34:00Z",{"field22":8312}],
             ["2026-10-06T12:00:00Z",{"field22":8181,"field27":8463.5,"field28":8350.5}]]}"""
-        val logs = mutableListOf<String>()
-        val result = MeasurementJson.graphMeasurements(raw, "KH-A", reproductionNow, logs::add)
+        val result = MeasurementJson.graphMeasurements(raw, "KH-A", reproductionNow)
         assertEquals(1, result.size); assertEquals(8.312, result.single().kh, 0.00001)
-        assertEquals(1, logs.size); org.junit.Assert.assertTrue(logs.single().contains("Rejected future graph row"))
     }
     @Test fun currentFieldsRequireTheirOwnMeasurementTimestampAndRejectFuture() {
         val invalid = """{"latest_kh":8181,"date":"2026-10-06T12:00:00Z"}"""

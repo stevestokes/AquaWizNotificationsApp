@@ -203,7 +203,6 @@ class SecureStore(context: Context) {
             merged.forEach { (serial, measurement) -> updated.put(measurementJson(serial, measurement)) }
             prefs.edit().putString("measurement_history", updated.toString()).apply()
             if (parsed.any { !MeasurementValidity.isNotFuture(it.second) }) {
-                appendActivity("Removed future-dated cached readings from History")
                 if (lastMeasurementEpochMs()?.let { it > Instant.now().plusSeconds(300).toEpochMilli() } == true) {
                     prefs.edit().remove("last_measurement_ms").remove("last_fingerprint").remove("last_kh").remove("next_poll_ms").apply()
                     merged.firstOrNull { it.first.equals(selectedDevice(), true) }?.second?.let {
