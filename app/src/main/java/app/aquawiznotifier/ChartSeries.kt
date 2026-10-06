@@ -21,7 +21,7 @@ enum class ChartLineStyle { SOLID, DASHED, DOTTED }
 object ChartBounds {
     fun calculate(
         items: List<Measurement>, low: Double?, high: Double?,
-        visible: Set<ChartSeries> = setOf(ChartSeries.KH),
+        visible: Set<ChartSeries> = setOf(ChartSeries.KH), target: Double? = null,
     ): Pair<Double, Double> {
         val values = items.flatMap { m -> visible.filter { it != ChartSeries.DELTA && it != ChartSeries.DOSE }.mapNotNull { it.value(m) } }
             .filter { it.isFinite() }.toMutableList()
@@ -29,6 +29,7 @@ object ChartBounds {
             values += low
             values += high
         }
+        target?.takeIf { it.isFinite() }?.let { values += it }
         // Tight, linear bounds retain the target band and every enabled KH/pH line.
         // Each edge receives only 0.2 padding, rather than fixed empty bands.
         return ((values.minOrNull() ?: 7.0) - 0.2) to ((values.maxOrNull() ?: 9.0) + 0.2)

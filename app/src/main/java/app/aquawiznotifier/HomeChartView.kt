@@ -17,12 +17,14 @@ class HomeChartView(context: Context) : View(context) {
     private val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.GRAY; textSize = sp(11f) }
     private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFE7E7E7.toInt(); strokeWidth = dp(1f) }
     private val markerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.GRAY; strokeWidth = dp(1f) }
+    private val targetPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.RED; strokeWidth = dp(1f) }
     private val bandPaint = Paint().apply { color = 0x0E5B34FF }
     private val limitPaint = Paint().apply { color = 0x775B34FF; strokeWidth = dp(1f); pathEffect = DashPathEffect(floatArrayOf(dp(4f), dp(4f)), 0f) }
     private var items = emptyList<Measurement>()
     private var visible = ChartSeries.values().filter { it.defaultVisible }.toSet()
     private var styles = emptyMap<ChartSeries, ChartLineStyle>()
     private var limits: Pair<Double?, Double?> = null to null
+    private var targetKh: Double? = null
     private var selected: Int? = null
     private var zoom = 1.0
     private var center = 0.5
@@ -53,12 +55,13 @@ class HomeChartView(context: Context) : View(context) {
     }
     fun resetZoom() { zoom = 1.0; center = 0.5; invalidate() }
     fun setOverview(enabled: Boolean) { if (overview != enabled) { overview = enabled; invalidate() } }
-    fun setMeasurements(measurements: List<Measurement>, lowLimit: Double? = null, highLimit: Double? = null) {
+    fun setMeasurements(measurements: List<Measurement>, lowLimit: Double? = null, highLimit: Double? = null, target: Double? = null) {
         val sorted = HistoryMerge.merge(measurements.map { "chart" to it }).map { it.second }.sortedBy { it.measuredAt }
-        if (items == sorted && limits == (lowLimit to highLimit)) return
+        if (items == sorted && limits == (lowLimit to highLimit) && targetKh == target) return
         val selectedTime = selected?.let { items.getOrNull(it)?.measuredAt }
         items = sorted
         limits = lowLimit to highLimit
+        targetKh = target
         selected = selectedTime?.let { time -> items.indexOfFirst { it.measuredAt == time }.takeIf { it >= 0 } }
         invalidate()
     }
@@ -81,7 +84,7 @@ class HomeChartView(context: Context) : View(context) {
                 (index < items.lastIndex && time < window.first && items[index + 1].measuredAt.toEpochMilli() >= window.first) ||
                 (index > 0 && time > window.second && items[index - 1].measuredAt.toEpochMilli() <= window.second)
         }
-        val primary = ChartBounds.calculate(inView, limits.first, limits.second, visible)
+        val primary = ChartBounds.calculate(inView, limits.first, limits.second, visible, targetKh)
         val secondary = ChartBounds.secondary(inView, visible)
         fun mapY(value: Double, bounds: Pair<Double, Double>, from: Float, to: Float) =
             to - (to - from) * ((value - bounds.first) / (bounds.second - bounds.first)).toFloat()
@@ -102,6 +105,9 @@ class HomeChartView(context: Context) : View(context) {
             val yy = y(value)
             canvas.drawLine(left, yy, right, yy, gridPaint)
             canvas.drawText("%.1f".format(value), dp(3f), yy + dp(4f), axisPaint)
+        }
+        targetKh?.takeIf { it.isFinite() }?.let { target ->
+            canvas.drawLine(left, y(target), right, y(target), targetPaint)
         }
         axisPaint.color = AwUi.INK
         canvas.drawText("ΔpH", right + dp(6f), dp(13f), axisPaint)

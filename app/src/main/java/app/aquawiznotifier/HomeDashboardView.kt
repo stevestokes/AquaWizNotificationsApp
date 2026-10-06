@@ -94,7 +94,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         val displayed = HistoryMerge.merge((all + (if (pointsDevice == serial) points else emptyList()))
             .map { serial to it }).map { it.second }.filter { !it.measuredAt.isBefore(since) }.sortedBy { it.measuredAt }
         chart.setOverview(selectedRange != Range.DAY)
-        chart.setMeasurements(displayed, summary?.khLow, summary?.khHigh)
+        chart.setMeasurements(displayed, summary?.khLow, summary?.khHigh, summary?.khTarget)
         val signature = displayed.lastOrNull()?.toString() + selectedRange.name + serial
         if (signature != displaySignature) { displayed.lastOrNull()?.let(::showSelected); displaySignature = signature }
         buttons.forEach { (range, button) -> button.isSelected = range == selectedRange; AwUi.styleButton(button, range == selectedRange) }
