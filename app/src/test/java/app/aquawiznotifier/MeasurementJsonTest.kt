@@ -8,6 +8,36 @@ import java.time.Instant
 
 class MeasurementJsonTest {
     private val reproductionNow = Instant.parse("2026-10-06T04:39:00Z")
+    @Test fun graphRejectsSummaryObjectsEvenWhenDatedInThePast() {
+        val raw = """{"results":[["2026-10-08T11:34:00Z",{"field22":8102}],
+            {"date":"2026-10-08T12:00:00Z","field22":8044,"field27":8329.5,"field28":8306.333}],
+            "summary":{"date":"2026-10-08T12:00:00Z","field22":8044}}"""
+        val rows = MeasurementJson.graphMeasurements(raw, "KH-A", Instant.parse("2026-10-08T13:40:00Z"))
+        assertEquals(1, rows.size)
+        assertEquals(8.102, rows.single().kh, 0.00001)
+    }
+    @Test fun statusLatestAverageCannotBecomeMeasurementEvenAfterEightAm() {
+        val server = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
+        fun respond(exchange: com.sun.net.httpserver.HttpExchange, raw: String) {
+            val bytes = raw.toByteArray(); exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        server.createContext("/api/v1/KH/KH-A/all_field") { e ->
+            respond(e, """{"field8":8000,"latest_kh":8044,"latest_time":"2026-10-08T12:00:00Z","field27":8329.5}""")
+        }
+        server.createContext("/api/v1/query/device/KH-A/graph") { e ->
+            respond(e, """{"results":[["2026-10-08T11:34:00Z",{"field22":8102,"field27":8270,"field28":8333}]]}""")
+        }
+        server.start()
+        try {
+            var summary: DeviceSummary? = null
+            val api = AquaWizApi("http://127.0.0.1:${server.address.port}")
+            val result = api.latestMeasurement(Session("test", "test-token", listOf("KH-A")), "KH-A") { summary = it }
+            assertEquals(8.102, result.kh, 0.00001)
+            assertEquals(Instant.parse("2026-10-08T11:34:00Z"), result.measuredAt)
+            assertEquals(8.0, summary!!.khTarget!!, 0.00001)
+        } finally { server.stop(0) }
+    }
     @Test fun graphSummaryCannotBecomeEightAmMeasurement() {
         val raw = """{"results":[["2026-10-06T04:34:00Z",{"field22":8312,"field27":8400,"field28":8340,"field26":0}]],
             "summary":{"date":"2026-10-06T12:00:00Z","field22":8181,"field27":8463.5,"field28":8350.5,"field26":0}}"""
@@ -98,11 +128,10 @@ class MeasurementJsonTest {
         assertEquals(Instant.parse("2026-09-29T13:04:00Z"), result.measuredAt)
     }
 
-    @Test fun parsesAlreadyTransformedGraphObjectWithField22() {
+    @Test fun rejectsAlreadyTransformedGraphObjects() {
         val raw = """{"results":[{"date":"2026-09-29T13:04:00Z","field22":"8.176"}]}"""
         val result = MeasurementJson.findLatest(raw, "KH1-00-05117", requirePreferredSerialWhenAmbiguous = false)
-        assertNotNull(result)
-        assertEquals(8.176, result!!.kh, 0.0001)
+        assertNull(result)
     }
 
 

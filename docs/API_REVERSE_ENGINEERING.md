@@ -165,8 +165,8 @@ AquaWiz Notifier exposes this as optional `Dose (mL)` notification data.
 The notifier uses this order:
 
 1. Authenticate with the same contract as the official AquaWiz app.
-2. Prefer the device-scoped `all_field` request for current values.
-3. Fall back to the serial-specific graph request when needed.
+2. Read `all_field` for controller settings only. Never save its latest/status values as measurements.
+3. Read measurements exclusively from serial-specific graph results in `[timestamp, fields]` format. Ignore summary objects and metadata.
 4. Use the selected controller serial; never guess between multiple explicitly identified devices.
 5. Reject implausible KH values outside 2–20 dKH.
 6. Use explicit AquaWiz graph mappings instead of generic number guessing where the official mapping is known.
@@ -269,3 +269,9 @@ User reproduction at 00:39 local time shows an extra 08:00 point with KH 8.18, p
 Confirmed code defects: `findLatest` traversed the entire graph response after extracting `results`, allowing dated statistics/metadata to compete with real rows, and API/cache paths accepted future timestamps. Home and History then persisted and selected the maximum timestamp. Opening Home calls both current and graph APIs without any settings write, so this ingestion path explains why changing the interval is unnecessary to reproduce the symptom.
 
 Graph fallback now accepts only `results` rows. Current status accepts only explicit latest KH/time fields. API ingestion and stored-history reads reject measurements more than five minutes ahead of the device clock; cached future points are removed, their polling anchors repaired, and startup immediately restarts a displaced poll. Diagnostic messages identify current measurements and rejected graph timestamps/values without credentials. The tests use a constructed graph response to demonstrate the parser defect; it is not presented as the user's captured server response. No synthetic point is retimed into a real measurement, and historical rows that are already in the past are not blindly deleted.
+
+### Status values are not measurement history (2026-10-08)
+
+The official CSV contains no 08:00 row. Its six readings from 2026-10-07 21:34 through 2026-10-08 07:34 average to KH 8.044, pH 8.3295 and pH(O) 8.306333, matching the reported spurious point. At 09:40 it passes the future-date guard. The original API responses remain unavailable, so the exact endpoint supplying this point is unconfirmed.
+
+Production ingestion now uses all_field only for controller settings. Current readings, notifications and baseline measurements come solely from graph results in the verified [timestamp, fields] row format. Object-shaped results and out-of-results metadata are ignored. Tests cover a past-dated latest-value aggregate in the status response and past-dated summary objects in results. This does not establish that all server graph array rows are individual tests; raw response verification is still needed if the point recurs. Already-cached past rows are not removed based on time alone.

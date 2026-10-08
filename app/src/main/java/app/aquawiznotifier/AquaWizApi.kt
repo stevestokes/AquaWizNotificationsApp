@@ -22,38 +22,20 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
 
     class ApiException(val status: Int, message: String) : Exception(message)
 
-    /**
-     * Reads the current AquaWiz value using the two cloud calls recovered from the official APK.
-     *
-     * The account-level all_field call is preferred because the official app names its current
-     * values latest_kh/latest_time. The device graph call is retained as a fallback in case the
-     * undocumented all_field schema changes.
-     */
+    /** Status is settings-only. Measurements come exclusively from official graph rows. */
     fun latestMeasurement(session: Session, serial: String, onSummary: ((DeviceSummary) -> Unit)? = null): Measurement {
         val normalizedSerial = serial.trim().uppercase()
-        val directFailure: Exception? = try {
-            val raw = rawAllFields(session, normalizedSerial)
-            DeviceSummaryJson.parse(raw, normalizedSerial)?.let { onSummary?.invoke(it) }
-            MeasurementJson.findLatest(raw, normalizedSerial, requirePreferredSerialWhenAmbiguous = true, currentOnly = true)?.let {
-                return it
+        if (onSummary != null) {
+            try {
+                DeviceSummaryJson.parse(rawAllFields(session, normalizedSerial), normalizedSerial)?.let(onSummary)
+            } catch (e: ApiException) {
+                if (e.status == 401 || e.status == 403) throw e
+            } catch (_: Exception) {
+                // Settings availability must not promote status values into History.
             }
-            ApiException(200, "AquaWiz all_field response did not contain a current KH value for device $normalizedSerial")
-        } catch (e: ApiException) {
-            if (e.status == 401 || e.status == 403) throw e
-            e
-        } catch (e: Exception) {
-            e
         }
-
-        try {
-            val raw = rawGraph(session, normalizedSerial)
-            return MeasurementJson.graphMeasurements(raw, normalizedSerial).lastOrNull()
-                ?: throw ApiException(200, "Connected, but no KH measurement could be identified in the AquaWiz graph response")
-        } catch (e: ApiException) {
-            if (e.status == 401 || e.status == 403) throw e
-            val detail = directFailure?.message?.let { "all_field: $it; graph: ${e.message}" } ?: e.message.orEmpty()
-            throw ApiException(e.status, detail)
-        }
+        return MeasurementJson.graphMeasurements(rawGraph(session, normalizedSerial), normalizedSerial).lastOrNull()
+            ?: throw ApiException(200, "Connected, but no KH measurement could be identified in the AquaWiz graph response")
     }
 
     /**
@@ -231,9 +213,6 @@ object MeasurementJson {
     private fun extractOfficialGraphRows(root: Any?, preferredSerial: String?, out: MutableList<Candidate>) {
         val results = (root as? JSONObject)?.optJSONArray("results") ?: return
         for (i in 0 until results.length()) {
-            results.optJSONObject(i)?.let { row ->
-                if (row.has("field22")) parseObject(row)?.let { parsed -> out += Candidate(parsed.copy(rawId = "graph:" + parsed.measuredAt.toEpochMilli()), preferredSerial) }
-            }
             val row = results.optJSONArray(i) ?: continue
             if (row.length() < 2) continue
             val measuredAt = parseInstant(row.opt(0)) ?: continue
