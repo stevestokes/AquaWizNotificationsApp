@@ -1,6 +1,9 @@
 package app.aquawiznotifier
 
 import android.Manifest
+import android.content.Intent
+import java.io.File
+import kotlin.concurrent.thread
 import android.app.Activity
 import android.os.Build
 import android.os.Bundle
@@ -20,6 +23,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 class MainActivity : Activity() {
+    private var graphExportFile: File? = null
+    private var graphExportInFlight = false
+    private val graphExportRequest = 701
     private lateinit var store: SecureStore
 
     private lateinit var homeSection: HomeDashboardView
@@ -67,6 +73,7 @@ class MainActivity : Activity() {
         if (Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false)
         SystemNavigation.configure(window)
         store = SecureStore(this)
+        graphExportFile = savedInstanceState?.getString("graph_export_file")?.let { File(cacheDir, it) }
         val hadFutureAnchor = store.lastMeasurementEpochMs()?.let { it > Instant.now().plusSeconds(300).toEpochMilli() } == true
         store.measurementHistory()
         store.migrateWebLogin()
@@ -95,8 +102,72 @@ class MainActivity : Activity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        graphExportFile?.let { outState.putString("graph_export_file", it.name) }
         outState.putString("current_section", currentSection)
         super.onSaveInstanceState(outState)
+    }
+
+    private fun downloadGraphJson(since: Instant) {
+        if (graphExportInFlight || graphExportFile != null) return
+        val session = store.session()
+        val serial = store.selectedDevice()
+        if (session == null || serial.isNullOrBlank() || store.authPaused()) {
+            Toast.makeText(this, "Reconnect using Web Login in Config", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val baseUrl = store.baseUrl()
+        graphExportInFlight = true
+        Toast.makeText(this, "Downloading graph response…", Toast.LENGTH_SHORT).show()
+        thread(name = "AquaWizGraphExport") {
+            val result = runCatching {
+                val raw = AquaWizApi(baseUrl).rawGraph(session, serial, since)
+                check(store.session()?.accessToken == session.accessToken && store.selectedDevice() == serial && store.baseUrl() == baseUrl)
+                // Save only the response body, never request headers or authentication data.
+                File.createTempFile("graph-export-", ".json", cacheDir).apply { writeText(raw, Charsets.UTF_8) }
+            }
+            runOnUiThread {
+                graphExportInFlight = false
+                if (isFinishing || isDestroyed) { result.getOrNull()?.delete(); return@runOnUiThread }
+                result.fold(onSuccess = { file ->
+                    graphExportFile = file
+                    try {
+                        @Suppress("DEPRECATION")
+                        startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "application/json"
+                            putExtra(Intent.EXTRA_TITLE, "AquaWiz-graph-${java.time.LocalDate.now()}.json")
+                        }, graphExportRequest)
+                    } catch (_: Exception) {
+                        file.delete(); graphExportFile = null
+                        Toast.makeText(this, "Unable to open the file picker", Toast.LENGTH_LONG).show()
+                    }
+                }, onFailure = {
+                    Toast.makeText(this, "Graph download failed. Check your connection and try again.", Toast.LENGTH_LONG).show()
+                })
+            }
+        }
+    }
+
+    @Deprecated("Deprecated in Android")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != graphExportRequest) return
+        val file = graphExportFile ?: return
+        graphExportFile = null
+        val uri = data?.data
+        if (resultCode != RESULT_OK || uri == null) { file.delete(); return }
+        thread(name = "AquaWizGraphSave") {
+            val saved = runCatching {
+                val output = contentResolver.openOutputStream(uri, "wt") ?: error("Unable to open file")
+                output.use { stream -> file.inputStream().use { it.copyTo(stream) } }
+            }.isSuccess
+            file.delete()
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed) Toast.makeText(this,
+                    if (saved) "Graph JSON saved." else "Unable to save graph JSON. Try again.",
+                    Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun buildUi(): View {
@@ -126,7 +197,7 @@ class MainActivity : Activity() {
         }
 
         val content = FrameLayout(this)
-        homeSection = HomeDashboardView(this, store)
+        homeSection = HomeDashboardView(this, store, ::downloadGraphJson)
         homeRefresh = PullRefreshView(this, { homeSection.canScrollVertically(-1) }, ::refreshMeasurements).apply {
             addView(homeSection, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         }
