@@ -259,7 +259,8 @@ object MeasurementJson {
 
     private fun doseFromField26(value: Any?): Double? {
         val raw = asDouble(value) ?: return null
-        val scaled = raw / 5000.0
+        // Captured KH1 graph field26=100 matches the official CSV dose of 50 mL.
+        val scaled = raw / 2.0
         return scaled.takeIf { it >= 0.0 }
     }
 

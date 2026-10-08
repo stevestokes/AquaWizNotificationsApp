@@ -8,6 +8,18 @@ import java.time.Instant
 
 class MeasurementJsonTest {
     private val reproductionNow = Instant.parse("2026-10-06T04:39:00Z")
+    @Test fun capturedGraphRowMatchesOfficialCsvUnitsAndTimestamp() {
+        val raw = """{"sample_size":1,"device":"KH-A","results":[[1791467192000,
+            {"field22":8390,"field23":0,"field24":12389,"field25":7278,
+             "field26":100,"field27":8348,"field28":8339}]]}"""
+        val row = MeasurementJson.graphMeasurements(raw, "KH-A", Instant.parse("2026-10-08T16:00:00Z")).single()
+        assertEquals(Instant.parse("2026-10-08T13:46:32Z"), row.measuredAt)
+        assertEquals(8.39, row.kh, 0.00001)
+        assertEquals(8.348, row.ph!!, 0.00001)
+        assertEquals(8.339, row.phOpenAir!!, 0.00001)
+        assertEquals(0.009, row.deltaPh!!, 0.00001)
+        assertEquals(50.0, row.doseMl!!, 0.00001)
+    }
     @Test fun graphRejectsSummaryObjectsEvenWhenDatedInThePast() {
         val raw = """{"results":[["2026-10-08T11:34:00Z",{"field22":8102}],
             {"date":"2026-10-08T12:00:00Z","field22":8044,"field27":8329.5,"field28":8306.333}],
@@ -141,7 +153,7 @@ class MeasurementJsonTest {
               "results": [
                 ["2026-09-29T13:04:00Z", {
                   "field22":8420,
-                  "field26":6000,
+                  "field26":2.4,
                   "field27":8270,
                   "field28":8350
                 }]
@@ -180,7 +192,7 @@ class MeasurementJsonTest {
             {
               "results": [
                 ["2026-09-29T15:00:00Z", {"field22":9990,"field27":7790,"field28":7900,"field26":0}],
-                ["2026-09-29T11:00:00Z", {"field22":10050,"field27":7730,"field28":7840,"field26":5000}]
+                ["2026-09-29T11:00:00Z", {"field22":10050,"field27":7730,"field28":7840,"field26":2}]
               ]
             }
         """.trimIndent()
@@ -199,7 +211,7 @@ class MeasurementJsonTest {
         assertEquals(8.42, current.kh, 0.00001)
         assertEquals(8.27, current.ph!!, 0.00001)
         val rows = MeasurementJson.graphMeasurements("""{"results":[["2026-09-29T13:04:00Z",{"field22":8420,"field26":50}]]}""")
-        assertEquals(0.01, rows.single().doseMl!!, 0.00001)
+        assertEquals(25.0, rows.single().doseMl!!, 0.00001)
     }
     @Test fun currentAndGraphReadingsMergeWithoutLosingOptionalFields() {
         val at = Instant.parse("2026-09-29T13:04:00Z")

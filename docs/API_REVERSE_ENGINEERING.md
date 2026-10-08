@@ -135,7 +135,7 @@ The following mappings were recovered from the official client's graph transform
 | Field | Meaning | Transform |
 | --- | --- | --- |
 | `field22` | Tank KH / dKH | raw / 1000 |
-| `field26` | Dosing amount (mL) | raw / 5000 |
+| `field26` | Dosing amount (mL) | raw / 2 (verified KH1 capture + CSV) |
 | `field27` | Tank pH | raw / 1000 |
 | `field28` | pH(O), fully aerated pH | raw / 1000 |
 | derived `delta` | ΔpH | field27 - field28 |
@@ -156,7 +156,7 @@ An earlier notifier build treated `field23` as pH because it was a plausibly sca
 
 The official chart legend associates its **Dosing** series with the animated graph value sourced from `field26`.
 
-The official raw-value transform divides `field26` by 5000 before display.
+The earlier APK-derived `/5000` interpretation was incorrect for the graph payload. An authenticated KH1 response captured on October 8 has `field26=100` at 09:46:32 local time; the matching official CSV reports 50 mL. Graph dose conversion now uses `/2`. This is verified for the captured KH1 response; independent KH2 verification is still outstanding.
 
 AquaWiz Notifier exposes this as optional `Dose (mL)` notification data.
 
@@ -275,3 +275,10 @@ Graph fallback now accepts only `results` rows. Current status accepts only expl
 The official CSV contains no 08:00 row. Its six readings from 2026-10-07 21:34 through 2026-10-08 07:34 average to KH 8.044, pH 8.3295 and pH(O) 8.306333, matching the reported spurious point. At 09:40 it passes the future-date guard. The original API responses remain unavailable, so the exact endpoint supplying this point is unconfirmed.
 
 Production ingestion now uses all_field only for controller settings. Current readings, notifications and baseline measurements come solely from graph results in the verified [timestamp, fields] row format. Object-shaped results and out-of-results metadata are ignored. Tests cover a past-dated latest-value aggregate in the status response and past-dated summary objects in results. This does not establish that all server graph array rows are individual tests; raw response verification is still needed if the point recurs. Already-cached past rows are not removed based on time alone.
+
+
+### Authenticated graph capture, October 8, 2026
+
+The downloaded graph response contains 12 `[epochMilliseconds, fields]` rows, from October 7 13:34 through October 8 11:34 America/Detroit. There is no 08:00 row. All 11 rows overlapping the earlier official CSV match its timestamps to the displayed minute, KH (`field22/1000`), tank pH (`field27/1000`), and aerated pH (`field28/1000`) exactly. The 09:46 raw dose is 100, matching 50 mL in the CSV after dividing by 2.
+
+This capture supports using graph rows directly and independently confirms these units. It does not prove which endpoint returned the earlier average at the time it occurred: the graph capture happened later, and an authenticated all_field response has not been captured. Previously cached 08:00 points remain until separately repaired; the capture alone is insufficient to delete arbitrary historical rows.
