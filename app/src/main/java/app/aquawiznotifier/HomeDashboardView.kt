@@ -187,7 +187,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore, privat
         }
         card.addView(ranges)
         card.addView(AwUi.button(context, "Download JSON").apply {
-            contentDescription = "Download raw server graph response for the selected date range"
+            contentDescription = "Download raw graph and status server responses for the selected date range"
             setOnClickListener { downloadGraph(Instant.now().minusSeconds(selectedRange.seconds)) }
         }, fullHeight(36))
         syncStatus.textSize = 10f; syncStatus.maxLines = 2

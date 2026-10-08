@@ -74,6 +74,24 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
         return MeasurementJson.graphMeasurements(raw, normalizedSerial)
     }
 
+    /** Read-only export of server response bodies before measurement parsing. */
+    fun downloadResponses(session: Session, serial: String, since: Instant): String {
+        val graphRequestedAt = Instant.now()
+        val graph = JSONTokener(rawGraph(session, serial, since)).nextValue()
+        val statusRequestedAt = Instant.now()
+        val status = JSONTokener(rawAllFields(session, serial)).nextValue()
+        return JSONObject()
+            .put("graph", graph)
+            .put("status", status)
+            .put("capture", JSONObject()
+                .put("graphRequestedAt", graphRequestedAt.toString())
+                .put("statusRequestedAt", statusRequestedAt.toString())
+                .put("completedAt", Instant.now().toString())
+                .put("graphSince", since.toString())
+                .put("timeZone", ZoneId.systemDefault().id))
+            .toString(2)
+    }
+
     fun setTrueTankKh(session: Session, serial: String, value: java.math.BigDecimal) {
         request("POST", baseUrl + KhCalibration.PATH, token = session.accessToken,
             body = KhCalibration.body(session, serial, value).toString())

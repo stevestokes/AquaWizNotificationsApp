@@ -8,6 +8,34 @@ import java.time.Instant
 
 class MeasurementJsonTest {
     private val reproductionNow = Instant.parse("2026-10-06T04:39:00Z")
+    @Test fun combinedDownloadPreservesStatusAverageAndRawGraphFields() {
+        val server = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
+        fun respond(exchange: com.sun.net.httpserver.HttpExchange, raw: String) {
+            val bytes = raw.toByteArray(); exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        server.createContext("/api/v1/KH/KH-A/all_field") { e ->
+            respond(e, """{"latest_kh":8044,"latest_time":"2026-10-08T12:00:00Z","field8":8500}""")
+        }
+        server.createContext("/api/v1/query/device/KH-A/graph") { e ->
+            respond(e, """{"sample_size":1,"results":[[1791467192000,{"field22":8390,"field26":100}]]}""")
+        }
+        server.start()
+        try {
+            val since = Instant.parse("2026-10-07T16:00:00Z")
+            val raw = AquaWizApi("http://127.0.0.1:${server.address.port}")
+                .downloadResponses(Session("test-user", "test-secret-token", listOf("KH-A")), "KH-A", since)
+            val result = org.json.JSONObject(raw)
+            assertEquals(8044, result.getJSONObject("status").getInt("latest_kh"))
+            assertEquals("2026-10-08T12:00:00Z", result.getJSONObject("status").getString("latest_time"))
+            val row = result.getJSONObject("graph").getJSONArray("results").getJSONArray(0)
+            assertEquals(1791467192000L, row.getLong(0))
+            assertEquals(100, row.getJSONObject(1).getInt("field26"))
+            assertEquals(since.toString(), result.getJSONObject("capture").getString("graphSince"))
+            org.junit.Assert.assertFalse(raw.contains("test-secret-token"))
+            org.junit.Assert.assertFalse(raw.contains("test-user"))
+        } finally { server.stop(0) }
+    }
     @Test fun capturedGraphRowMatchesOfficialCsvUnitsAndTimestamp() {
         val raw = """{"sample_size":1,"device":"KH-A","results":[[1791467192000,
             {"field22":8390,"field23":0,"field24":12389,"field25":7278,

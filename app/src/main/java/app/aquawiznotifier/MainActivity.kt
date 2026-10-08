@@ -117,10 +117,10 @@ class MainActivity : Activity() {
         }
         val baseUrl = store.baseUrl()
         graphExportInFlight = true
-        Toast.makeText(this, "Downloading graph response…", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Downloading server responses…", Toast.LENGTH_SHORT).show()
         thread(name = "AquaWizGraphExport") {
             val result = runCatching {
-                val raw = AquaWizApi(baseUrl).rawGraph(session, serial, since)
+                val raw = AquaWizApi(baseUrl).downloadResponses(session, serial, since)
                 check(store.session()?.accessToken == session.accessToken && store.selectedDevice() == serial && store.baseUrl() == baseUrl)
                 // Save only the response body, never request headers or authentication data.
                 File.createTempFile("graph-export-", ".json", cacheDir).apply { writeText(raw, Charsets.UTF_8) }
@@ -135,14 +135,14 @@ class MainActivity : Activity() {
                         startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                             addCategory(Intent.CATEGORY_OPENABLE)
                             type = "application/json"
-                            putExtra(Intent.EXTRA_TITLE, "AquaWiz-graph-${java.time.LocalDate.now()}.json")
+                            putExtra(Intent.EXTRA_TITLE, "AquaWiz-responses-${java.time.LocalDate.now()}.json")
                         }, graphExportRequest)
                     } catch (_: Exception) {
                         file.delete(); graphExportFile = null
                         Toast.makeText(this, "Unable to open the file picker", Toast.LENGTH_LONG).show()
                     }
                 }, onFailure = {
-                    Toast.makeText(this, "Graph download failed. Check your connection and try again.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "Server response download failed. Check your connection and try again.", Toast.LENGTH_LONG).show()
                 })
             }
         }
@@ -164,7 +164,7 @@ class MainActivity : Activity() {
             file.delete()
             runOnUiThread {
                 if (!isFinishing && !isDestroyed) Toast.makeText(this,
-                    if (saved) "Graph JSON saved." else "Unable to save graph JSON. Try again.",
+                    if (saved) "Server responses saved." else "Unable to save server responses. Try again.",
                     Toast.LENGTH_LONG).show()
             }
         }
