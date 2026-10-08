@@ -14,7 +14,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.concurrent.thread
 
-class HomeDashboardView(context: Context, private val store: SecureStore, private val downloadGraph: (Instant) -> Unit) : ScrollView(context) {
+class HomeDashboardView(context: Context, private val store: SecureStore) : ScrollView(context) {
     enum class Range(val label: String, val seconds: Long) {
         DAY("1D", 86400), THREE_DAYS("3D", 259200), WEEK("1W", 604800), MONTH("1M", 2592000), YEAR("1Y", 31536000)
     }
@@ -186,10 +186,6 @@ class HomeDashboardView(context: Context, private val store: SecureStore, privat
             ranges.addView(button, LinearLayout.LayoutParams(0, dp(36), 1f).apply { setMargins(dp(2), 0, dp(2), 0) })
         }
         card.addView(ranges)
-        card.addView(AwUi.button(context, "Download JSON").apply {
-            contentDescription = "Download raw graph and status server responses for the selected date range"
-            setOnClickListener { downloadGraph(Instant.now().minusSeconds(selectedRange.seconds)) }
-        }, fullHeight(36))
         syncStatus.textSize = 10f; syncStatus.maxLines = 2
         card.addView(syncStatus, full().apply { topMargin = dp(6) })
         chart.contentDescription = "Measurement chart. Drag to inspect, pinch to zoom, double tap to reset. Left scale: dKH and pH. Right scale: delta-pH and dose in mL."
@@ -216,7 +212,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore, privat
         thread(name = "AquaWizHome") {
             var summaryError: String? = null
             try {
-                val api = AquaWizApi(baseUrl)
+                val api = AquaWizApi(baseUrl, store::captureIngestion, "home")
                 try {
                     val latest = api.latestMeasurement(session, serial) { if (current()) store.saveDeviceSummary(serial, it) }
                     if (current()) store.saveMeasurement(serial, latest)

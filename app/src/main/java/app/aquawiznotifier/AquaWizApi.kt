@@ -12,7 +12,11 @@ import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
 
-class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
+class AquaWizApi(
+    private val baseUrl: String = GLOBAL_BASE,
+    private val capture: ((JSONObject) -> Unit)? = null,
+    private val source: String = "unspecified",
+) {
     data class TargetReadback(val summary: DeviceSummary?, val matches: Boolean, val error: Throwable? = null)
     companion object {
         const val GLOBAL_BASE = "https://server.aquawiz.net"
@@ -25,16 +29,19 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
     /** Status is settings-only. Measurements come exclusively from official graph rows. */
     fun latestMeasurement(session: Session, serial: String, onSummary: ((DeviceSummary) -> Unit)? = null): Measurement {
         val normalizedSerial = serial.trim().uppercase()
+        var statusRaw: String? = null
         if (onSummary != null) {
             try {
-                DeviceSummaryJson.parse(rawAllFields(session, normalizedSerial), normalizedSerial)?.let(onSummary)
+                statusRaw = rawAllFields(session, normalizedSerial)
+                DeviceSummaryJson.parse(statusRaw, normalizedSerial)?.let(onSummary)
             } catch (e: ApiException) {
                 if (e.status == 401 || e.status == 403) throw e
             } catch (_: Exception) {
                 // Settings availability must not promote status values into History.
             }
         }
-        return MeasurementJson.graphMeasurements(rawGraph(session, normalizedSerial), normalizedSerial).lastOrNull()
+        val since = Instant.now().minusSeconds(8 * 60 * 60)
+        return parseAndCapture(rawGraph(session, normalizedSerial, since), normalizedSerial, since, statusRaw).lastOrNull()
             ?: throw ApiException(200, "Connected, but no KH measurement could be identified in the AquaWiz graph response")
     }
 
@@ -71,25 +78,29 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
     fun graphMeasurements(session: Session, serial: String, since: Instant): List<Measurement> {
         val normalizedSerial = serial.trim().uppercase()
         val raw = rawGraph(session, normalizedSerial, since)
-        return MeasurementJson.graphMeasurements(raw, normalizedSerial)
+        return parseAndCapture(raw, normalizedSerial, since)
     }
 
-    /** Read-only export of server response bodies before measurement parsing. */
-    fun downloadResponses(session: Session, serial: String, since: Instant): String {
-        val graphRequestedAt = Instant.now()
-        val graph = JSONTokener(rawGraph(session, serial, since)).nextValue()
-        val statusRequestedAt = Instant.now()
-        val status = JSONTokener(rawAllFields(session, serial)).nextValue()
-        return JSONObject()
-            .put("graph", redactExportCredentials(graph))
-            .put("status", redactExportCredentials(status))
-            .put("capture", JSONObject()
-                .put("graphRequestedAt", graphRequestedAt.toString())
-                .put("statusRequestedAt", statusRequestedAt.toString())
-                .put("completedAt", Instant.now().toString())
-                .put("graphSince", since.toString())
-                .put("timeZone", ZoneId.systemDefault().id))
-            .toString(2)
+    private fun parseAndCapture(raw: String, serial: String, since: Instant, statusRaw: String? = null): List<Measurement> {
+        val now = Instant.now()
+        val rows = MeasurementJson.graphMeasurements(raw, serial, now)
+        val sink = capture
+        if (sink != null) runCatching {
+            val accepted = JSONArray()
+            rows.forEach { m -> accepted.put(JSONObject()
+                .put("measuredAt", m.measuredAt.toString()).put("rawId", m.rawId)
+                .put("kh", m.kh).put("ph", m.ph).put("phOpenAir", m.phOpenAir)
+                .put("deltaPh", m.deltaPh).put("doseMl", m.doseMl)) }
+            sink.invoke(JSONObject()
+                .put("capturedAt", now.toString()).put("source", source).put("serial", serial)
+                .put("server", baseUrl).put("graphSince", since.toString())
+                .put("timeZone", ZoneId.systemDefault().id)
+                .put("graph", redactExportCredentials(JSONTokener(raw).nextValue()))
+                .put("status", statusRaw?.let { redactExportCredentials(JSONTokener(it).nextValue()) } ?: JSONObject.NULL)
+                .put("acceptedReadings", accepted))
+        }
+        // Capture failures must never prevent monitoring or alter the parsed readings.
+        return rows
     }
 
     private fun redactExportCredentials(value: Any?): Any? {

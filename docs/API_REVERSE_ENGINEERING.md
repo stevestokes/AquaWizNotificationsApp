@@ -282,3 +282,12 @@ Production ingestion now uses all_field only for controller settings. Current re
 The downloaded graph response contains 12 `[epochMilliseconds, fields]` rows, from October 7 13:34 through October 8 11:34 America/Detroit. There is no 08:00 row. All 11 rows overlapping the earlier official CSV match its timestamps to the displayed minute, KH (`field22/1000`), tank pH (`field27/1000`), and aerated pH (`field28/1000`) exactly. The 09:46 raw dose is 100, matching 50 mL in the CSV after dividing by 2.
 
 This capture supports using graph rows directly and independently confirms these units. It does not prove which endpoint returned the earlier average at the time it occurred: the graph capture happened later, and an authenticated all_field response has not been captured. Previously cached 08:00 points remain until separately repaired; the capture alone is insufficient to delete arbitrary historical rows.
+
+
+### Automatic ingestion evidence
+
+The temporary chart response-download button and fresh-request export API were removed. Polling, Home loading, manual refresh, and connection baseline now capture the exact graph response, request start date, calling path, timezone, parsed readings, and paired status response when available. History writes also record incoming and stored readings. Credentials returned by the server are recursively redacted before persistence. No extra network requests are made for capture, and capture failure cannot interrupt ingestion.
+
+Config → Export support data exports saved evidence for the selected controller without refetching the server. Captures live in app-private storage: up to 64 routine records and 8 records containing local 08:00 rows, within an 8 MiB total budget. Individual records larger than 4 MiB are skipped. Raw future 08:00 rows are retained even when measurement parsing rejects them. The clock-time rule affects evidence retention only; it does not suppress legitimate readings.
+
+The October 8 11:58 local combined capture has no 08:00 row in either endpoint. Status reports latest KH 8545 and time 1791473659704, matching the graph's 11:34 row to within one second. This does not identify the earlier average's source. Importantly, manual refresh also requests a year of history, which earlier one-day exports did not inspect. Automatic evidence includes that longer request so server aggregation and app parsing can be distinguished.

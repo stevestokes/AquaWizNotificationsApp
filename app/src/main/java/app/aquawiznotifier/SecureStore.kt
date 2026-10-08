@@ -14,6 +14,10 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 class SecureStore(context: Context) {
+    private val captures = IngestionCaptureStore(java.io.File(context.filesDir, "measurement-support"))
+    fun captureIngestion(record: JSONObject) = captures.record(record)
+    fun supportData(): String = captures.export(selectedDevice(), BuildConfig.VERSION_NAME)
+
     private val prefs = context.getSharedPreferences("aquawiz_notifier", Context.MODE_PRIVATE)
     companion object { private val historyLock = Any(); private val activityLock = Any() }
     private val alias = "aquawiz_notifier_key_v1"
@@ -181,6 +185,12 @@ class SecureStore(context: Context) {
             updated.put(measurementJson(deviceSerial, measurement))
         }
         prefs.edit().putString("measurement_history", updated.toString()).apply()
+        captures.record(JSONObject().put("type", "history-save").put("serial", serial)
+            .put("capturedAt", Instant.now().toString()).put("timeZone", java.time.ZoneId.systemDefault().id)
+            .put("incomingReadings", JSONArray(measurements.map { measurementJson(serial, it) }))
+            .put("storedReadings", JSONArray(merged.filter { (device, row) ->
+                device.equals(serial, true) && measurements.any { HistoryMerge.sameReading(it, row) }
+            }.map { (device, row) -> measurementJson(device, row) })))
 
         merged.firstOrNull()?.let { (deviceSerial, measurement) ->
             saveLatestMeasurement(deviceSerial, measurement)

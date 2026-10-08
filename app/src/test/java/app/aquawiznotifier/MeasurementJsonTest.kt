@@ -8,7 +8,7 @@ import java.time.Instant
 
 class MeasurementJsonTest {
     private val reproductionNow = Instant.parse("2026-10-06T04:39:00Z")
-    @Test fun combinedDownloadPreservesStatusAverageAndRawGraphFields() {
+    @Test fun automaticCapturePreservesStatusAverageAndExactIngestedGraphFields() {
         val server = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
         fun respond(exchange: com.sun.net.httpserver.HttpExchange, raw: String) {
             val bytes = raw.toByteArray(); exchange.sendResponseHeaders(200, bytes.size.toLong())
@@ -22,22 +22,31 @@ class MeasurementJsonTest {
         }
         server.start()
         try {
-            val since = Instant.parse("2026-10-07T16:00:00Z")
-            val raw = AquaWizApi("http://127.0.0.1:${server.address.port}")
-                .downloadResponses(Session("test-user", "test-secret-token", listOf("KH-A")), "KH-A", since)
-            val result = org.json.JSONObject(raw)
-            assertEquals(8044, result.getJSONObject("status").getInt("latest_kh"))
-            assertEquals("2026-10-08T12:00:00Z", result.getJSONObject("status").getString("latest_time"))
-            val row = result.getJSONObject("graph").getJSONArray("results").getJSONArray(0)
+            var result: org.json.JSONObject? = null
+            val api = AquaWizApi("http://127.0.0.1:${server.address.port}", { result = it }, "poll")
+            val reading = api.latestMeasurement(Session("test-user", "test-secret-token", listOf("KH-A")), "KH-A") { }
+            val capture = result!!
+            assertEquals("poll", capture.getString("source"))
+            assertEquals(8044, capture.getJSONObject("status").getInt("latest_kh"))
+            assertEquals("2026-10-08T12:00:00Z", capture.getJSONObject("status").getString("latest_time"))
+            val row = capture.getJSONObject("graph").getJSONArray("results").getJSONArray(0)
             assertEquals(1791467192000L, row.getLong(0))
             assertEquals(100, row.getJSONObject(1).getInt("field26"))
-            assertEquals(since.toString(), result.getJSONObject("capture").getString("graphSince"))
-            org.junit.Assert.assertFalse(raw.contains("test-secret-token"))
-            org.junit.Assert.assertFalse(raw.contains("test-user"))
-            listOf("server-secret-token", "device-secret", "old-secret", "pending-secret", "nested-secret").forEach {
+            val parsed = capture.getJSONArray("acceptedReadings").getJSONObject(0)
+            assertEquals(reading.measuredAt.toString(), parsed.getString("measuredAt"))
+            assertEquals(reading.doseMl!!, parsed.getDouble("doseMl"), 0.00001)
+            val raw = capture.toString()
+            listOf("test-secret-token", "test-user", "server-secret-token", "device-secret", "old-secret", "pending-secret", "nested-secret").forEach {
                 org.junit.Assert.assertFalse(raw.contains(it))
             }
-            assertEquals("[REDACTED]", result.getJSONObject("status").getString("access_token"))
+            assertEquals("[REDACTED]", capture.getJSONObject("status").getString("access_token"))
+            val since = Instant.parse("2025-10-08T00:00:00Z")
+            api.graphMeasurements(Session("test-user", "test-secret-token", listOf("KH-A")), "KH-A", since)
+            assertEquals(since.toString(), result!!.getString("graphSince"))
+            org.junit.Assert.assertTrue(result!!.isNull("status"))
+            // A diagnostic storage failure cannot break measurements.
+            val failing = AquaWizApi("http://127.0.0.1:${server.address.port}", { error("Disk full") })
+            assertEquals(reading.kh, failing.latestMeasurement(Session("test", "test", listOf("KH-A")), "KH-A").kh, 0.00001)
         } finally { server.stop(0) }
     }
     @Test fun capturedGraphRowMatchesOfficialCsvUnitsAndTimestamp() {

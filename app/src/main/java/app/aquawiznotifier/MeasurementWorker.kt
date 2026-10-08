@@ -16,7 +16,7 @@ class MeasurementWorker(context: Context, params: WorkerParameters) : Worker(con
         }
         val session = store.session() ?: return Result.success()
         val serial = store.selectedDevice() ?: session.devices.firstOrNull() ?: return Result.success()
-        val api = AquaWizApi(store.baseUrl())
+        val api = AquaWizApi(store.baseUrl(), store::captureIngestion, "poll")
         store.measurementHistory() // Repair future history/poll anchors before comparing fingerprints.
 
         try {

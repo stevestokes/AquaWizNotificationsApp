@@ -23,9 +23,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 class MainActivity : Activity() {
-    private var graphExportFile: File? = null
-    private var graphExportInFlight = false
-    private val graphExportRequest = 701
+    private var supportExportFile: File? = null
+    private var supportExportInFlight = false
+    private val supportExportRequest = 701
     private lateinit var store: SecureStore
 
     private lateinit var homeSection: HomeDashboardView
@@ -72,8 +72,9 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false)
         SystemNavigation.configure(window)
+        cacheDir.listFiles()?.filter { it.name.startsWith("graph-export-") && it.name.endsWith(".json") }?.forEach { it.delete() }
         store = SecureStore(this)
-        graphExportFile = savedInstanceState?.getString("graph_export_file")?.let { File(cacheDir, it) }
+        supportExportFile = savedInstanceState?.getString("support_export_file")?.let { File(cacheDir, it) }
         val hadFutureAnchor = store.lastMeasurementEpochMs()?.let { it > Instant.now().plusSeconds(300).toEpochMilli() } == true
         store.measurementHistory()
         store.migrateWebLogin()
@@ -102,47 +103,40 @@ class MainActivity : Activity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        graphExportFile?.let { outState.putString("graph_export_file", it.name) }
+        supportExportFile?.let { outState.putString("support_export_file", it.name) }
         outState.putString("current_section", currentSection)
         super.onSaveInstanceState(outState)
     }
 
-    private fun downloadGraphJson(since: Instant) {
-        if (graphExportInFlight || graphExportFile != null) return
-        val session = store.session()
-        val serial = store.selectedDevice()
-        if (session == null || serial.isNullOrBlank() || store.authPaused()) {
-            Toast.makeText(this, "Reconnect using Web Login in Config", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val baseUrl = store.baseUrl()
-        graphExportInFlight = true
-        Toast.makeText(this, "Downloading server responses…", Toast.LENGTH_SHORT).show()
-        thread(name = "AquaWizGraphExport") {
+    private fun exportSupportData() {
+        if (supportExportInFlight || supportExportFile != null) return
+        supportExportInFlight = true
+        Toast.makeText(this, "Preparing support data…", Toast.LENGTH_SHORT).show()
+        thread(name = "AquaWizSupportExport") {
             val result = runCatching {
-                val raw = AquaWizApi(baseUrl).downloadResponses(session, serial, since)
-                check(store.session()?.accessToken == session.accessToken && store.selectedDevice() == serial && store.baseUrl() == baseUrl)
-                // Save only the response body, never request headers or authentication data.
-                File.createTempFile("graph-export-", ".json", cacheDir).apply { writeText(raw, Charsets.UTF_8) }
+                val raw = store.supportData()
+                check(org.json.JSONObject(raw).getJSONArray("captures").length() > 0)
+                // Export retained, redacted evidence without refetching the server.
+                File.createTempFile("support-export-", ".json", cacheDir).apply { writeText(raw, Charsets.UTF_8) }
             }
             runOnUiThread {
-                graphExportInFlight = false
+                supportExportInFlight = false
                 if (isFinishing || isDestroyed) { result.getOrNull()?.delete(); return@runOnUiThread }
                 result.fold(onSuccess = { file ->
-                    graphExportFile = file
+                    supportExportFile = file
                     try {
                         @Suppress("DEPRECATION")
                         startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                             addCategory(Intent.CATEGORY_OPENABLE)
                             type = "application/json"
-                            putExtra(Intent.EXTRA_TITLE, "AquaWiz-responses-${java.time.LocalDate.now()}.json")
-                        }, graphExportRequest)
+                            putExtra(Intent.EXTRA_TITLE, "AquaWiz-support-${java.time.LocalDate.now()}.json")
+                        }, supportExportRequest)
                     } catch (_: Exception) {
-                        file.delete(); graphExportFile = null
+                        file.delete(); supportExportFile = null
                         Toast.makeText(this, "Unable to open the file picker", Toast.LENGTH_LONG).show()
                     }
                 }, onFailure = {
-                    Toast.makeText(this, "Server response download failed. Check your connection and try again.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "No support data available yet. Refresh the app and try again.", Toast.LENGTH_LONG).show()
                 })
             }
         }
@@ -151,12 +145,12 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Android")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != graphExportRequest) return
-        val file = graphExportFile ?: return
-        graphExportFile = null
+        if (requestCode != supportExportRequest) return
+        val file = supportExportFile ?: return
+        supportExportFile = null
         val uri = data?.data
         if (resultCode != RESULT_OK || uri == null) { file.delete(); return }
-        thread(name = "AquaWizGraphSave") {
+        thread(name = "AquaWizSupportSave") {
             val saved = runCatching {
                 val output = contentResolver.openOutputStream(uri, "wt") ?: error("Unable to open file")
                 output.use { stream -> file.inputStream().use { it.copyTo(stream) } }
@@ -164,7 +158,7 @@ class MainActivity : Activity() {
             file.delete()
             runOnUiThread {
                 if (!isFinishing && !isDestroyed) Toast.makeText(this,
-                    if (saved) "Server responses saved." else "Unable to save server responses. Try again.",
+                    if (saved) "Support data saved." else "Unable to save support data. Try again.",
                     Toast.LENGTH_LONG).show()
             }
         }
@@ -197,7 +191,7 @@ class MainActivity : Activity() {
         }
 
         val content = FrameLayout(this)
-        homeSection = HomeDashboardView(this, store, ::downloadGraphJson)
+        homeSection = HomeDashboardView(this, store)
         homeRefresh = PullRefreshView(this, { homeSection.canScrollVertically(-1) }, ::refreshMeasurements).apply {
             addView(homeSection, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         }
@@ -316,7 +310,7 @@ class MainActivity : Activity() {
         kotlin.concurrent.thread(name = "AquaWizPullRefresh") {
             var message = "Measurements refreshed"
             try {
-                val api = AquaWizApi(baseUrl)
+                val api = AquaWizApi(baseUrl, store::captureIngestion, "refresh")
                 try {
                     val latest = api.latestMeasurement(session, serial) { if (current()) store.saveDeviceSummary(serial, it) }
                     if (current()) store.saveMeasurement(serial, latest)
@@ -405,6 +399,9 @@ class MainActivity : Activity() {
         }, full())
         actions.addView(AwUi.button(this, "Check for updates").apply {
             setOnClickListener { store.appendActivity("Manual update check queued"); UpdateChecker.checkNow(this@MainActivity); toast("Update check queued"); updateStatus() }
+        }, full())
+        actions.addView(AwUi.button(this, "Export support data").apply {
+            setOnClickListener { exportSupportData() }
         }, full())
         actions.addView(AwUi.button(this, "Stop & disconnect").apply {
             setTextColor(0xFFB64242.toInt())
@@ -521,7 +518,7 @@ class MainActivity : Activity() {
         connectButton.isEnabled = false
         Thread {
             try {
-                val api = AquaWizApi(store.baseUrl())
+                val api = AquaWizApi(store.baseUrl(), store::captureIngestion, "connect")
                 val session = Session(
                     username = usernameValue,
                     accessToken = tokenValue,
