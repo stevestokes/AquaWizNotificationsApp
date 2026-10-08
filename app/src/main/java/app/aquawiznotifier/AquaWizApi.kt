@@ -81,8 +81,8 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
         val statusRequestedAt = Instant.now()
         val status = JSONTokener(rawAllFields(session, serial)).nextValue()
         return JSONObject()
-            .put("graph", graph)
-            .put("status", status)
+            .put("graph", redactExportCredentials(graph))
+            .put("status", redactExportCredentials(status))
             .put("capture", JSONObject()
                 .put("graphRequestedAt", graphRequestedAt.toString())
                 .put("statusRequestedAt", statusRequestedAt.toString())
@@ -90,6 +90,19 @@ class AquaWizApi(private val baseUrl: String = GLOBAL_BASE) {
                 .put("graphSince", since.toString())
                 .put("timeZone", ZoneId.systemDefault().id))
             .toString(2)
+    }
+
+    private fun redactExportCredentials(value: Any?): Any? {
+        when (value) {
+            is JSONObject -> value.keys().asSequence().toList().forEach { key ->
+                val name = key.lowercase(java.util.Locale.ROOT)
+                if (listOf("token", "passcode", "password", "secret", "credential").any { name.contains(it) } || name.endsWith("_pw")) {
+                    value.put(key, "[REDACTED]")
+                } else value.put(key, redactExportCredentials(value.opt(key)))
+            }
+            is JSONArray -> for (i in 0 until value.length()) value.put(i, redactExportCredentials(value.opt(i)))
+        }
+        return value
     }
 
     fun setTrueTankKh(session: Session, serial: String, value: java.math.BigDecimal) {

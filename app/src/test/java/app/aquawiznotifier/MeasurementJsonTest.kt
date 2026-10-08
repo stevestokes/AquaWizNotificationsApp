@@ -15,7 +15,7 @@ class MeasurementJsonTest {
             exchange.responseBody.use { it.write(bytes) }
         }
         server.createContext("/api/v1/KH/KH-A/all_field") { e ->
-            respond(e, """{"latest_kh":8044,"latest_time":"2026-10-08T12:00:00Z","field8":8500}""")
+            respond(e, """{"latest_kh":8044,"latest_time":"2026-10-08T12:00:00Z","field8":8500,"access_token":"server-secret-token","passcode":"device-secret","old_passcode":"old-secret","pending_pw":"pending-secret","nested":{"token":{"access_token":"nested-secret"}}}""")
         }
         server.createContext("/api/v1/query/device/KH-A/graph") { e ->
             respond(e, """{"sample_size":1,"results":[[1791467192000,{"field22":8390,"field26":100}]]}""")
@@ -34,6 +34,10 @@ class MeasurementJsonTest {
             assertEquals(since.toString(), result.getJSONObject("capture").getString("graphSince"))
             org.junit.Assert.assertFalse(raw.contains("test-secret-token"))
             org.junit.Assert.assertFalse(raw.contains("test-user"))
+            listOf("server-secret-token", "device-secret", "old-secret", "pending-secret", "nested-secret").forEach {
+                org.junit.Assert.assertFalse(raw.contains(it))
+            }
+            assertEquals("[REDACTED]", result.getJSONObject("status").getString("access_token"))
         } finally { server.stop(0) }
     }
     @Test fun capturedGraphRowMatchesOfficialCsvUnitsAndTimestamp() {
