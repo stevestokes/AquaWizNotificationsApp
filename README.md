@@ -221,8 +221,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 23
-versionName = "0.8.12"
+versionCode = 24
+versionName = "0.8.13"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -333,3 +333,12 @@ Graph statistics can no longer become measurement rows. Future-dated readings ar
 ## 0.8.12 Target KH reference line
 
 The Home graph shows a thin red horizontal line at the controller’s target KH value. The line uses the left dKH scale and remains included in chart bounds across ranges and zoom levels.
+
+
+## 0.8.13 Measurement sources, dosing, and support capture
+
+Controller status is now used only for settings. Current readings and notifications come from graph result rows; status summaries and object-shaped graph summaries cannot become history readings. Graph dosing uses the units verified against a captured KH1 server response and the official CSV: raw `field26 / 2` gives mL.
+
+The app automatically retains bounded, credential-redacted evidence from polling, Home, manual refresh, connection setup, and history writes. Config → Export support data saves those captures without making another server request. The temporary chart JSON-download button has been removed.
+
+The cause of the reported 08:00 averaged reading is still under investigation; this release does not claim a confirmed fix for that symptom or delete previously cached past readings. Install over an existing signed version to preserve history and settings.
