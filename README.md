@@ -226,8 +226,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 26
-versionName = "0.8.15"
+versionCode = 27
+versionName = "0.8.16"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -363,3 +363,9 @@ The cause of the reported 08:00 averaged reading is still under investigation; t
 - Slide tab content according to navigation direction and animate the bottom menu resizing when Status is shown or hidden.
 - Respect Android's disabled-animation setting and stop animations when their views are hidden.
 - Show the available-update notification on every manual Check for updates, even after an earlier notification was dismissed. Automatic checks retain once-per-version behavior.
+
+## 0.8.16 Swipe navigation and visible refresh shimmer
+
+- Swipe left or right between visible screens, using the same directional transitions as the bottom menu. Hidden Status is skipped and navigation stops at either end. Chart inspection and zoom retain their gestures.
+- Slow the shimmer sweep to 1.6 seconds and keep loading overlays visible for at least one sweep on fast refreshes. Data requests and updates still finish immediately.
+- Show the same shimmer over the History data table during manual refresh. Respect disabled system animations and cancel pending overlay work when detached.

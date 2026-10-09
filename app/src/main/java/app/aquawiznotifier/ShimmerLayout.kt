@@ -11,8 +11,28 @@ open class ShimmerLayout(context: Context, private val shimmerRadius: Int = 0) :
     private var phase = 0f
     private var animator: ValueAnimator? = null
     private var aggregatedVisible = false
-    var isLoading = false
-        set(value) { field = value; updateAnimation(); invalidate() }
+    private var showingLoading = false
+    private var requestedLoading = false
+    private var loadingStarted = 0L
+    private val finishLoading = Runnable {
+        if (!requestedLoading) { showingLoading = false; updateAnimation(); invalidate() }
+    }
+    var isLoading: Boolean
+        get() = showingLoading
+        set(value) {
+            removeCallbacks(finishLoading)
+            requestedLoading = value
+            if (value) {
+                if (!showingLoading) loadingStarted = android.os.SystemClock.uptimeMillis()
+                showingLoading = true
+                updateAnimation(); invalidate()
+            } else {
+                val remaining = if (ValueAnimator.areAnimatorsEnabled() && isShown)
+                    (1600L - (android.os.SystemClock.uptimeMillis() - loadingStarted)).coerceAtLeast(0L) else 0L
+                if (remaining > 0 && isAttachedToWindow) postDelayed(finishLoading, remaining)
+                else finishLoading.run()
+            }
+        }
 
     private fun updateAnimation() {
         if (!isLoading || !aggregatedVisible || !isShown || !isAttachedToWindow || !ValueAnimator.areAnimatorsEnabled()) {
@@ -20,7 +40,7 @@ open class ShimmerLayout(context: Context, private val shimmerRadius: Int = 0) :
         }
         if (animator != null) return
         animator = ValueAnimator.ofFloat(-1f, 2f).apply {
-            duration = 1100; repeatCount = ValueAnimator.INFINITE
+            duration = 1600; repeatCount = ValueAnimator.INFINITE
             interpolator = android.view.animation.LinearInterpolator()
             addUpdateListener { phase = it.animatedValue as Float; invalidate() }
             start()
@@ -28,7 +48,7 @@ open class ShimmerLayout(context: Context, private val shimmerRadius: Int = 0) :
     }
     override fun onVisibilityAggregated(visible: Boolean) { super.onVisibilityAggregated(visible); aggregatedVisible = visible; updateAnimation() }
     override fun onAttachedToWindow() { super.onAttachedToWindow(); updateAnimation() }
-    override fun onDetachedFromWindow() { animator?.cancel(); animator = null; aggregatedVisible = false; super.onDetachedFromWindow() }
+    override fun onDetachedFromWindow() { removeCallbacks(finishLoading); if (!requestedLoading) showingLoading = false; animator?.cancel(); animator = null; aggregatedVisible = false; super.onDetachedFromWindow() }
     override fun dispatchDraw(canvas: Canvas) {
         super.dispatchDraw(canvas)
         if (!isLoading) return

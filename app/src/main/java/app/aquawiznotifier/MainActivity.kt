@@ -30,6 +30,7 @@ class MainActivity : Activity() {
 
     private lateinit var homeSection: HomeDashboardView
     private lateinit var homeRefresh: PullRefreshView
+    private lateinit var historyShimmer: ShimmerLayout
     private lateinit var historyRefresh: PullRefreshView
     private var manualRefreshInFlight = false
     private lateinit var statusSection: View
@@ -191,7 +192,11 @@ class MainActivity : Activity() {
             post { requestApplyInsets() }
         }
 
-        val content = FrameLayout(this)
+        val content = SwipeNavigationLayout(this) { forward ->
+            val sections = listOf("home", "history", "status", "config").filter { it != "status" || store.showStatusTab() }
+            val next = sections.indexOf(currentSection) + if (forward) 1 else -1
+            sections.getOrNull(next)?.let(::showSection)
+        }
         homeSection = HomeDashboardView(this, store)
         homeRefresh = PullRefreshView(this, { homeSection.canScrollVertically(-1) }, ::refreshMeasurements).apply {
             addView(homeSection, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -299,11 +304,13 @@ class MainActivity : Activity() {
         val empty = AwUi.label(this, "No measurements stored yet.", 15f).apply { setPadding(0, dp(24), 0, 0) }
         root.addView(empty)
         historyList.emptyView = empty
-        root.addView(FrameLayout(this).apply {
+        historyShimmer = ShimmerLayout(this, 16).apply { orientation = LinearLayout.VERTICAL }
+        historyShimmer.addView(FrameLayout(this).apply {
             background = AwUi.surface(this@MainActivity, radius = 16)
             setPadding(dp(2), dp(2), dp(2), dp(2))
             addView(historyList, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        root.addView(historyShimmer, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         historyRefresh = PullRefreshView(this, { historyList.canScrollVertically(-1) }, ::refreshMeasurements).apply {
             addView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         }
@@ -314,6 +321,7 @@ class MainActivity : Activity() {
         if (manualRefreshInFlight) return
         fun finish(message: String) {
             manualRefreshInFlight = false
+            historyShimmer.isLoading = false
             homeRefresh.isRefreshing = false; historyRefresh.isRefreshing = false
             homeSection.refreshFromLocal(); updateHistory()
             toast(message)
@@ -325,6 +333,7 @@ class MainActivity : Activity() {
             return
         }
         manualRefreshInFlight = true
+        historyShimmer.isLoading = true
         homeSection.refreshAsync { message ->
             if (!isFinishing && !isDestroyed) finish(message)
         }
