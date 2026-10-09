@@ -30,8 +30,13 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
     private val phStatus = label("Unavailable", 12f, Color.WHITE)
     private val khTarget = label("—", 22f, Color.BLACK, true)
     private val remainingDose = label("—", 22f, Color.BLACK, true)
+    private val containerTotal = label("Set full volume", 10f, Color.GRAY).apply {
+        setSingleLine(true)
+        setAutoSizeTextTypeUniformWithConfiguration(8, 10, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+    }
     private val dosingBeaker = DosingBeakerView(context).apply { setOnClickListener { editDosingContainer() } }
     private val dailyDose = label("—", 22f, Color.BLACK, true)
+    private val dosingSparkline = DosingSparklineView(context)
     private val syncStatus = label("", 12f, Color.GRAY)
     private val selectedTime = label("", 12f, Color.GRAY)
     private val chart = HomeChartView(context)
@@ -86,12 +91,16 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         phStatus.text = ProbeHealth.label(probe)
         phStatus.background = rounded(if (probe != null && probe in 100.0..999.0) 0xFF60C579.toInt() else 0x33333333, 6f)
         khTarget.text = summary?.khTarget?.let { "%.2f".format(it) } ?: "—"
-        remainingDose.text = summary?.dosingRemainingMl?.let { "%.0f".format(it) } ?: "—"
+        remainingDose.text = summary?.dosingRemainingMl?.let { it.toLong().toString() } ?: "—"
         remainingDose.setTextColor(if (summary?.dosingRemainingMl != null && summary.dosingWarningMl != null && summary.dosingRemainingMl < summary.dosingWarningMl) 0xFFE76C00.toInt() else Color.BLACK)
-        dosingBeaker.setLevel(serial, summary?.dosingRemainingMl, store.dosingContainerMl(serial), summary?.dosingWarningMl)
+        val fullVolume = store.dosingContainerMl(serial)
+        containerTotal.text = fullVolume?.let { "of ${it.toLong()} mL" } ?: "Set full volume"
+        dosingBeaker.setLevel(serial, summary?.dosingRemainingMl, fullVolume, summary?.dosingWarningMl)
         val today = LocalDate.now()
-        val todayValues = all.filter { it.measuredAt.atZone(ZoneId.systemDefault()).toLocalDate() == today }.mapNotNull { it.doseMl }
-        dailyDose.text = if (todayValues.isEmpty()) "—" else "%.2f".format(todayValues.sum())
+        val todayReadings = all.filter { it.measuredAt.atZone(ZoneId.systemDefault()).toLocalDate() == today }.sortedBy { it.measuredAt }
+        val todayValues = todayReadings.mapNotNull { it.doseMl?.takeIf { n -> n.isFinite() && n >= 0 } }
+        dailyDose.text = if (todayValues.isEmpty()) "—" else todayValues.sum().toLong().toString()
+        dosingSparkline.setMeasurements(todayReadings)
         val since = Instant.now().minusSeconds(selectedRange.seconds)
         val displayed = HistoryMerge.merge((all + (if (pointsDevice == serial) points else emptyList()))
             .map { serial to it }).map { it.second }.filter { !it.measuredAt.isBefore(since) }.sortedBy { it.measuredAt }
@@ -401,8 +410,11 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
                 setAutoSizeTextTypeUniformWithConfiguration(9, 11, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
             }, fullHeight(16))
             addView(valueWithUnit(value, unit, Color.BLACK), fullHeight(30))
+            if (title == "KH Dosing") addView(containerTotal, fullHeight(14))
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        if (title != "Today's Dosing") {
+        if (title == "Today's Dosing") {
+            addView(dosingSparkline, LinearLayout.LayoutParams(dp(56), dp(44)).apply { leftMargin = dp(4) })
+        } else {
             val section = if (title == "KH Target") KhSettingsSection.TARGET else KhSettingsSection.DOSING
             setOnClickListener { openSettings(section) }
             if (section == KhSettingsSection.DOSING) {

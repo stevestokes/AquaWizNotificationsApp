@@ -25,7 +25,7 @@ class BottomNavigationView(context: Context, showStatus: Boolean, private val on
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
         setPadding(dp(8), dp(2), dp(8), dp(2))
-        background = AwUi.surface(context, Color.WHITE, radius = 18, border = false)
+        background = AwUi.surface(context, Color.WHITE, radius = 36, border = false)
         accessibilityDelegate = object : View.AccessibilityDelegate() {
             override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfo) {
                 super.onInitializeAccessibilityNodeInfo(host, info)
