@@ -40,7 +40,8 @@ Account names and device ID suffixes are redacted.
 - Encrypted AquaWiz account/token storage using Android Keystore.
 - Background polling never auto-logs in after an AquaWiz session rejection; monitoring pauses instead to avoid disrupting the official AquaWiz app session.
 - Four-section app UI: **Home**, **Status**, **History**, and **Config**.
-- Compact floating bottom menu with vector House, Clock arrow, Pulse, and Gear icons, plus a blue circle for the selected section.
+- Compact bottom menu with rounded rectangular corners and a blue rounded square for the selected section.
+- Animated KH dosing beaker with remaining mL and percentage full. Tap the beaker to set the full container volume; this display preference is saved separately for each controller. Tap the dosing card's text to edit AquaWiz dosing settings.
 - Persistent, auto-scrolling activity/diagnostic log in the optional Status section.
 - Local measurement History stores every retrieved measurement and all available values regardless of notification-display settings.
 - Global and China AquaWiz server support.

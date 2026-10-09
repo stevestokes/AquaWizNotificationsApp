@@ -30,6 +30,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
     private val phStatus = label("Unavailable", 12f, Color.WHITE)
     private val khTarget = label("—", 22f, Color.BLACK, true)
     private val remainingDose = label("—", 22f, Color.BLACK, true)
+    private val dosingBeaker = DosingBeakerView(context).apply { setOnClickListener { editDosingContainer() } }
     private val dailyDose = label("—", 22f, Color.BLACK, true)
     private val syncStatus = label("", 12f, Color.GRAY)
     private val selectedTime = label("", 12f, Color.GRAY)
@@ -87,6 +88,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         khTarget.text = summary?.khTarget?.let { "%.2f".format(it) } ?: "—"
         remainingDose.text = summary?.dosingRemainingMl?.let { "%.0f".format(it) } ?: "—"
         remainingDose.setTextColor(if (summary?.dosingRemainingMl != null && summary.dosingWarningMl != null && summary.dosingRemainingMl < summary.dosingWarningMl) 0xFFE76C00.toInt() else Color.BLACK)
+        dosingBeaker.setLevel(serial, summary?.dosingRemainingMl, store.dosingContainerMl(serial), summary?.dosingWarningMl)
         val today = LocalDate.now()
         val todayValues = all.filter { it.measuredAt.atZone(ZoneId.systemDefault()).toLocalDate() == today }.mapNotNull { it.doseMl }
         dailyDose.text = if (todayValues.isEmpty()) "—" else "%.2f".format(todayValues.sum())
@@ -145,8 +147,8 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         }, weighted(false))
         root.addView(row, full().apply { bottomMargin = dp(8) })
         val doses = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-        doses.addView(card("KH Dosing", remainingDose, "mL"), weighted(true))
-        doses.addView(card("Today's Dosing", dailyDose, "mL"), weighted(false))
+        doses.addView(card("KH Dosing", remainingDose, "mL"), weighted(true).apply { height = dp(78) })
+        doses.addView(card("Today's Dosing", dailyDose, "mL"), weighted(false).apply { height = dp(78) })
         root.addView(doses, full().apply { bottomMargin = dp(8) })
     }
     private fun buildChart() {
@@ -362,6 +364,33 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
                 }
             } }).show()
     }
+    private fun editDosingContainer() {
+        val serial = store.selectedDevice() ?: return
+        val input = EditText(context).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+            setSingleLine(true); hint = "Full container volume in mL"
+            contentDescription = "Full dosing container volume in mL"
+            store.dosingContainerMl(serial)?.let { setText(java.math.BigDecimal.valueOf(it).stripTrailingZeros().toPlainString()) }
+        }
+        val panel = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(8), dp(24), 0)
+            addView(label("Enter the volume when your dosing container is full. The beaker shows remaining mL as a percentage of this volume.", 14f, Color.DKGRAY), full())
+            addView(input, full())
+        }
+        val dialog = AlertDialog.Builder(context).setTitle("Full container volume")
+            .setView(panel).setNegativeButton("Cancel", null).setPositiveButton("Save", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val amount = KhCalibration.parse(input.text.toString())?.toDouble()
+                if (amount == null || !amount.isFinite() || amount <= 0) {
+                    input.error = "Enter a volume greater than zero"; return@setOnClickListener
+                }
+                store.setDosingContainerMl(serial, amount)
+                refreshFromLocal(); dialog.dismiss()
+            }
+        }
+        dialog.show()
+    }
     private fun card(title: String, value: TextView, unit: String) = HeroCardLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(10), dp(4), dp(6), dp(4))
@@ -376,7 +405,9 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         if (title != "Today's Dosing") {
             val section = if (title == "KH Target") KhSettingsSection.TARGET else KhSettingsSection.DOSING
             setOnClickListener { openSettings(section) }
-            addView(ImageButton(context).apply {
+            if (section == KhSettingsSection.DOSING) {
+                addView(dosingBeaker, LinearLayout.LayoutParams(dp(52), dp(66)).apply { leftMargin = dp(4) })
+            } else addView(ImageButton(context).apply {
                 setImageResource(if (section == KhSettingsSection.TARGET) R.drawable.ic_kh_target else R.drawable.ic_kh_dose)
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 setPadding(dp(5), dp(11), dp(5), dp(11)); background = rounded(0xFFF1F1F1.toInt(), 16f)

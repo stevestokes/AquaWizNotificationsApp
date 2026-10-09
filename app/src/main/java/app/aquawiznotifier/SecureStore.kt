@@ -134,6 +134,14 @@ class SecureStore(context: Context) {
     }
     fun deviceSummary(serial: String): DeviceSummary? = prefs.getString("summary_" + serial.uppercase(), null)?.let { DeviceSummaryJson.parse(it, serial) }
 
+    // Container size is a display preference, not an AquaWiz controller setting.
+    fun dosingContainerMl(serial: String): Double? = prefs.getString("dosing_container_" + serial.uppercase(), null)
+        ?.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 }
+    fun setDosingContainerMl(serial: String, volume: Double) {
+        require(volume.isFinite() && volume > 0) { "Enter a full container volume greater than zero" }
+        prefs.edit().putString("dosing_container_" + serial.uppercase(), volume.toString()).apply()
+    }
+
     fun measurementIntervalMinutes(): Long = prefs.getLong("measurement_interval", 60L).coerceIn(15L, 24L * 60L)
     fun setMeasurementIntervalMinutes(v: Long) = prefs.edit().putLong("measurement_interval", v.coerceIn(15L, 24L * 60L)).apply()
     fun baseUrl(): String = prefs.getString("base_url", AquaWizApi.GLOBAL_BASE) ?: AquaWizApi.GLOBAL_BASE
