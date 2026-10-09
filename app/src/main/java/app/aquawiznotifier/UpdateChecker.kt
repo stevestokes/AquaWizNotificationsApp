@@ -2,6 +2,7 @@ package app.aquawiznotifier
 
 import android.content.Context
 import androidx.work.Constraints
+import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
@@ -28,6 +29,7 @@ object UpdateChecker {
     private const val UNIQUE_PERIODIC_WORK = "aquawiz_release_update_periodic"
     private const val UNIQUE_MANUAL_WORK = "aquawiz_release_update_now"
     private const val STARTUP_CHECK_INTERVAL_MS = 6L * 60L * 60L * 1000L
+    internal const val MANUAL_CHECK = "manual_update_check"
 
     private val networkConstraints = Constraints.Builder()
         .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -55,6 +57,7 @@ object UpdateChecker {
     private fun enqueueNow(context: Context, replace: Boolean) {
         val request = OneTimeWorkRequestBuilder<UpdateWorker>()
             .setConstraints(networkConstraints)
+            .setInputData(Data.Builder().putBoolean(MANUAL_CHECK, replace).build())
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
             UNIQUE_MANUAL_WORK,
@@ -73,6 +76,16 @@ object UpdateChecker {
             if (left != right) return left > right
         }
         return false
+    }
+
+    internal fun notifyIfNewer(context: Context, release: ReleaseInfo, manual: Boolean) {
+        if (!isNewer(release.tagName, BuildConfig.VERSION_NAME)) return
+        val store = SecureStore(context)
+        if (manual || store.lastUpdateNotifiedVersion() != release.versionName) {
+            Notifier.updateAvailable(context, release)
+            store.appendActivity("Update available: " + release.versionName)
+            store.setLastUpdateNotifiedVersion(release.versionName)
+        }
     }
 
     private fun parseVersion(value: String): List<Int>? {
@@ -128,13 +141,7 @@ class UpdateWorker(context: Context, params: WorkerParameters) : Worker(context,
             store.setLastUpdateError(null)
             store.appendActivity("Latest GitHub release: " + release.versionName)
 
-            if (UpdateChecker.isNewer(release.tagName, BuildConfig.VERSION_NAME)) {
-                if (store.lastUpdateNotifiedVersion() != release.versionName) {
-                    Notifier.updateAvailable(applicationContext, release)
-                    store.appendActivity("Update available: " + release.versionName)
-                    store.setLastUpdateNotifiedVersion(release.versionName)
-                }
-            }
+            UpdateChecker.notifyIfNewer(applicationContext, release, inputData.getBoolean(UpdateChecker.MANUAL_CHECK, false))
             Result.success()
         } catch (e: Exception) {
             store.setLastUpdateError(e.message ?: e.javaClass.simpleName)

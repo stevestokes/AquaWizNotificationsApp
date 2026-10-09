@@ -49,6 +49,7 @@ Account names and device ID suffixes are redacted.
 - Global and China AquaWiz server support.
 - GitHub Releases update checker with an Android notification when a newer app version is available.
 - Manual **Check for updates** button.
+- Manual update checks re-show the update notification whenever a newer release is available, even after dismissal. Automatic checks notify once per release version.
 - Test notification uses the most recent real stored measurement when available; before the first real reading it uses one of several normal sample measurements.
 - GitHub and Reef2Reef links directly in the app.
 - Measurement notifications open AquaWiz Notifier when tapped, bringing its existing screen to the foreground when it is already open.
