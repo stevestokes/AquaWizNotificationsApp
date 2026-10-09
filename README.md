@@ -226,8 +226,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 25
-versionName = "0.8.14"
+versionCode = 26
+versionName = "0.8.15"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -355,3 +355,11 @@ The cause of the reported 08:00 averaged reading is still under investigation; t
 - Add an animated dosing beaker with percentage full, remaining mL, and a saved full-container volume for each controller. Updating the full volume immediately updates the displayed total and fill level.
 - Add a yellow sparkline beside Today's Dosing; dosing totals show whole mL while calculations retain full precision.
 - Keep the pill-shaped bottom menu and round the selected square's corners further.
+
+## 0.8.15 Dashboard motion and update checks
+
+- Shimmer hero panels during refresh and fetch controller settings and raw readings concurrently, allowing each group to finish independently.
+- Reveal graph lines from left to right when loading data or returning to Home.
+- Slide tab content according to navigation direction and animate the bottom menu resizing when Status is shown or hidden.
+- Respect Android's disabled-animation setting and stop animations when their views are hidden.
+- Show the available-update notification on every manual Check for updates, even after an earlier notification was dismissed. Automatic checks retain once-per-version behavior.

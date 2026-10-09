@@ -22,8 +22,8 @@ android {
         applicationId = "app.aquawiznotifier"
         minSdk = 26
         targetSdk = 36
-        versionCode = 25
-        versionName = "0.8.14"
+        versionCode = 26
+        versionName = "0.8.15"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
