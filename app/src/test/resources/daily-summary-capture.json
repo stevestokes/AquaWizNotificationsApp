@@ -1,0 +1,158 @@
+{
+  "captures": [
+    {
+      "source": "home",
+      "graphSince": "2026-09-09T16:26:48.191516Z",
+      "capturedAt": "2026-10-09T16:26:48.232783Z",
+      "timeZone": "America/New_York",
+      "serial": "KH-A",
+      "graph": {
+        "sample_size": 8,
+        "device": "KH-A",
+        "no_bubble": false,
+        "do_refill": false,
+        "do_refill_vap": false,
+        "results": [
+          [
+            1791509659000,
+            {
+              "field22": 8191,
+              "field23": 0,
+              "field24": 13114,
+              "field25": 7278,
+              "field26": 0,
+              "field27": 8431,
+              "field28": 8367
+            }
+          ],
+          [
+            1791516859000,
+            {
+              "field22": 8150,
+              "field23": 0,
+              "field24": 13170,
+              "field25": 7278,
+              "field26": 0,
+              "field27": 8394,
+              "field28": 8368
+            }
+          ],
+          [
+            1791524059000,
+            {
+              "field22": 8090,
+              "field23": 0,
+              "field24": 13012,
+              "field25": 7278,
+              "field26": 0,
+              "field27": 8357,
+              "field28": 8358
+            }
+          ],
+          [
+            1791531260000,
+            {
+              "field22": 8115,
+              "field23": 0,
+              "field24": 12888,
+              "field25": 7278,
+              "field26": 0,
+              "field27": 8324,
+              "field28": 8352
+            }
+          ],
+          [
+            1791538459000,
+            {
+              "field22": 8139,
+              "field23": 0,
+              "field24": 12837,
+              "field25": 7278,
+              "field26": 0,
+              "field27": 8295,
+              "field28": 8350
+            }
+          ],
+          [
+            1791545660000,
+            {
+              "field22": 8163,
+              "field23": 0,
+              "field24": 12828,
+              "field25": 7278,
+              "field26": 0,
+              "field27": 8281,
+              "field28": 8350
+            }
+          ],
+          [
+            1791552860000,
+            {
+              "field22": 8221,
+              "field23": 0,
+              "field24": 12816,
+              "field25": 7278,
+              "field26": 0,
+              "field27": 8272,
+              "field28": 8352
+            }
+          ],
+          [
+            1791560058000,
+            {
+              "field22": 8262,
+              "field23": 0,
+              "field24": 12348,
+              "field25": 7278,
+              "field26": 120,
+              "field27": 8263,
+              "field28": 8329
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "source": "home",
+      "graphSince": "2025-10-09T16:26:54.302469Z",
+      "capturedAt": "2026-10-09T16:26:54.340708Z",
+      "timeZone": "America/New_York",
+      "serial": "KH-A",
+      "graph": {
+        "sample_size": 2,
+        "device": "KH-A",
+        "no_bubble": false,
+        "do_refill": false,
+        "do_refill_vap": false,
+        "results": [
+          [
+            1791460800000,
+            {
+              "field22": 8235,
+              "field23": 0,
+              "field24": 12571,
+              "field25": 7278,
+              "field26": 356,
+              "field27": 8344,
+              "field28": 8340,
+              "field29": 0
+            }
+          ],
+          [
+            1791547200000,
+            {
+              "field22": 8166,
+              "field23": 0,
+              "field24": 12877,
+              "field25": 7278,
+              "field26": 120,
+              "field27": 8327,
+              "field28": 8353,
+              "field29": 0
+            }
+          ]
+        ]
+      }
+    }
+  ]
+}

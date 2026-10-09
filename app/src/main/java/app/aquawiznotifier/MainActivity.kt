@@ -318,8 +318,8 @@ class MainActivity : Activity() {
                     if (e.status == 401 || e.status == 403) throw e
                     message = "History refreshed; current status unavailable"
                 } catch (e: Exception) { message = "History refreshed; current status unavailable" }
-                // Refresh the full retained history, independent of the Home chart's selected range.
-                val readings = api.graphMeasurements(session, serial, Instant.now().minusSeconds(HomeDashboardView.Range.YEAR.seconds))
+                // Long queries return daily summaries; retain local history and import raw recent tests.
+                val readings = api.graphMeasurements(session, serial, Instant.now().minusSeconds(AquaWizApi.RAW_GRAPH_WINDOW_SECONDS))
                 if (current()) store.saveMeasurements(serial, readings)
             } catch (e: Exception) {
                 if (current()) {

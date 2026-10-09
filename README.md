@@ -43,6 +43,7 @@ Account names and device ID suffixes are redacted.
 - Compact pill-shaped bottom menu with a blue rounded square for the selected section.
 - Animated KH dosing beaker with remaining mL and percentage full. Tap the beaker to set the full container volume; this display preference is saved separately for each controller. Tap the dosing card's text to edit AquaWiz dosing settings.
 - Today's Dosing includes a yellow sparkline of today's per-measurement dose. Dosing totals display whole mL (fractional digits are omitted); calculations retain their full precision.
+- New measurement imports use one-day graph requests. Longer charts use saved individual readings, because year-long AquaWiz queries return daily averages with misleading 8 AM timestamps in Eastern daylight time. Existing entries are removed only when they exactly match a captured daily summary and their timestamp was absent from captured raw readings.
 - Persistent, auto-scrolling activity/diagnostic log in the optional Status section.
 - Local measurement History stores every retrieved measurement and all available values regardless of notification-display settings.
 - Global and China AquaWiz server support.

@@ -7,6 +7,27 @@ import org.junit.Test
 import java.time.Instant
 
 class MeasurementJsonTest {
+    @Test fun yearRequestUsesRawWindowSoDailyAveragesCannotEnterHistory() {
+        val fixture = org.json.JSONObject(javaClass.getResource("/daily-summary-capture.json")!!.readText()).getJSONArray("captures")
+        val server = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
+        var requested: Instant? = null
+        server.createContext("/api/v1/query/device/KH-A/graph") { e ->
+            val date = java.net.URLDecoder.decode(e.requestURI.rawQuery.substringAfter("date="), "UTF-8")
+            requested = Instant.parse(date)
+            val daily = requested!!.isBefore(Instant.now().minusSeconds(86405))
+            val raw = fixture.getJSONObject(if (daily) 1 else 0).getJSONObject("graph").toString().toByteArray()
+            e.sendResponseHeaders(200, raw.size.toLong()); e.responseBody.use { it.write(raw) }
+        }
+        server.start()
+        try {
+            val api = AquaWizApi("http://127.0.0.1:${server.address.port}")
+            val rows = api.graphMeasurements(Session("test", "test", listOf("KH-A")), "KH-A", Instant.now().minusSeconds(365L * 86400))
+            assertEquals(8, rows.size)
+            assertEquals(8.262, rows.last().kh, 0.00001)
+            org.junit.Assert.assertFalse(rows.any { it.measuredAt == Instant.ofEpochMilli(1791547200000) })
+            org.junit.Assert.assertTrue(requested!!.isAfter(Instant.now().minusSeconds(86405)))
+        } finally { server.stop(0) }
+    }
     private val reproductionNow = Instant.parse("2026-10-06T04:39:00Z")
     @Test fun automaticCapturePreservesStatusAverageAndExactIngestedGraphFields() {
         val server = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
@@ -42,7 +63,9 @@ class MeasurementJsonTest {
             assertEquals("[REDACTED]", capture.getJSONObject("status").getString("access_token"))
             val since = Instant.parse("2025-10-08T00:00:00Z")
             api.graphMeasurements(Session("test-user", "test-secret-token", listOf("KH-A")), "KH-A", since)
-            assertEquals(since.toString(), result!!.getString("graphSince"))
+            val effectiveSince = Instant.parse(result!!.getString("graphSince"))
+            org.junit.Assert.assertTrue(effectiveSince.isAfter(Instant.now().minusSeconds(86405)))
+            org.junit.Assert.assertTrue(effectiveSince.isBefore(Instant.now().minusSeconds(86395)))
             org.junit.Assert.assertTrue(result!!.isNull("status"))
             // A diagnostic storage failure cannot break measurements.
             val failing = AquaWizApi("http://127.0.0.1:${server.address.port}", { error("Disk full") })

@@ -21,6 +21,9 @@ class AquaWizApi(
     companion object {
         const val GLOBAL_BASE = "https://server.aquawiz.net"
         const val CHINA_BASE = "https://server.aquawiz.cn"
+        // Long graph queries return daily aggregates in the same results-array schema.
+        // A one-day request is the captured, verified individual-measurement window.
+        const val RAW_GRAPH_WINDOW_SECONDS = 86400L
 
     }
 
@@ -77,8 +80,9 @@ class AquaWizApi(
 
     fun graphMeasurements(session: Session, serial: String, since: Instant): List<Measurement> {
         val normalizedSerial = serial.trim().uppercase()
-        val raw = rawGraph(session, normalizedSerial, since)
-        return parseAndCapture(raw, normalizedSerial, since)
+        val rawSince = maxOf(since, Instant.now().minusSeconds(RAW_GRAPH_WINDOW_SECONDS))
+        val raw = rawGraph(session, normalizedSerial, rawSince)
+        return parseAndCapture(raw, normalizedSerial, rawSince)
     }
 
     private fun parseAndCapture(raw: String, serial: String, since: Instant, statusRaw: String? = null): List<Measurement> {

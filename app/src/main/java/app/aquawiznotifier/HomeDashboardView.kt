@@ -229,7 +229,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
                     if (current()) store.saveMeasurement(serial, latest)
                 } catch (e: AquaWizApi.ApiException) { if (e.status == 401 || e.status == 403) throw e; summaryError = "Current status unavailable" }
                 catch (e: Exception) { summaryError = "Current status unavailable" }
-                val fetched = api.graphMeasurements(session, serial, Instant.now().minusSeconds(maxOf(range.seconds, 86400)))
+                val fetched = api.graphMeasurements(session, serial, Instant.now().minusSeconds(AquaWizApi.RAW_GRAPH_WINDOW_SECONDS))
                 if (!current()) return@thread
                 store.saveMeasurements(serial, fetched)
                 post {

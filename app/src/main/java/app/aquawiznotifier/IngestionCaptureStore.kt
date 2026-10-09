@@ -7,6 +7,9 @@ import java.time.Instant
 import java.time.ZoneId
 import java.util.UUID
 
+internal fun summaryIdentity(serial: String, m: Measurement): String =
+    listOf(HistoryMerge.readingKey(serial, m), m.kh, m.ph, m.phOpenAir, m.doseMl).joinToString("|")
+
 /** Private, bounded evidence from actual ingestion; no extra server requests. */
 class IngestionCaptureStore(
     private val directory: File,
@@ -51,6 +54,33 @@ class IngestionCaptureStore(
         }
         JSONObject().put("appVersion", version).put("exportedAt", Instant.now().toString())
             .put("captures", records).toString(2)
+    }
+
+    /** Only remove an exact captured aggregate, and protect any timestamp seen in raw captures. */
+    fun confirmedDailySummaryIdentities(): Set<String> = synchronized(lock) {
+        val summaries = mutableSetOf<String>()
+        val rawTimes = mutableSetOf<String>()
+        val summaryRows = mutableListOf<Pair<String, Measurement>>()
+        files().forEach { file ->
+            runCatching {
+                val record = JSONObject(file.readText(Charsets.UTF_8))
+                val graph = record.optJSONObject("graph") ?: return@runCatching
+                val serial = record.getString("serial")
+                val since = Instant.parse(record.getString("graphSince"))
+                val at = Instant.parse(record.getString("capturedAt"))
+                val rows = MeasurementJson.graphMeasurements(graph.toString(), serial, at)
+                val daily = since.isBefore(at.minusSeconds(31L * 86400)) && rows.size >= 2 &&
+                    rows.all { it.measuredAt.atZone(java.time.ZoneOffset.UTC).toLocalTime() == java.time.LocalTime.NOON } &&
+                    rows.map { it.measuredAt.atZone(java.time.ZoneOffset.UTC).toLocalDate() }.distinct().size == rows.size
+                if (daily) summaryRows.addAll(rows.map { serial to it })
+                else if (!since.isBefore(at.minusSeconds(31L * 86400))) {
+                    rows.forEach { rawTimes.add(HistoryMerge.readingKey(serial, it)) }
+                }
+            }
+        }
+        summaryRows.filter { (serial, m) -> HistoryMerge.readingKey(serial, m) !in rawTimes }
+            .forEach { (serial, m) -> summaries.add(summaryIdentity(serial, m)) }
+        summaries
     }
 
     private fun files(): List<File> = directory.listFiles()?.filter { it.name.endsWith(".json") }

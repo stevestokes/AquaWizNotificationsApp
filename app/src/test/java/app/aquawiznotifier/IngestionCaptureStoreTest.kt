@@ -7,6 +7,25 @@ import org.junit.Test
 import java.nio.file.Files
 
 class IngestionCaptureStoreTest {
+    @Test fun capturedDailySummariesAreIdentifiedButRealEightAmReadingsAreProtected() {
+        val directory = Files.createTempDirectory("aw-daily-evidence").toFile()
+        try {
+            val fixture = JSONObject(javaClass.getResource("/daily-summary-capture.json")!!.readText()).getJSONArray("captures")
+            val store = IngestionCaptureStore(directory)
+            store.record(fixture.getJSONObject(0)); store.record(fixture.getJSONObject(1))
+            val serial = "KH-A"
+            val summaries = MeasurementJson.graphMeasurements(fixture.getJSONObject(1).getJSONObject("graph").toString(), serial)
+            assertEquals(2, store.confirmedDailySummaryIdentities().size)
+            // A genuine raw row at the very same 8 AM timestamp must survive, even with identical values.
+            val raw = fixture.getJSONObject(0)
+            raw.getJSONObject("graph").getJSONArray("results").put(
+                fixture.getJSONObject(1).getJSONObject("graph").getJSONArray("results").getJSONArray(0))
+            store.record(raw)
+            val identities = store.confirmedDailySummaryIdentities()
+            assertFalse(summaryIdentity(serial, summaries.first()) in identities)
+            assertTrue(summaryIdentity(serial, summaries.last()) in identities)
+        } finally { directory.deleteRecursively() }
+    }
     private fun entry(id: Int, eight: Boolean = false, serial: String = "KH-A") = JSONObject()
         .put("serial", serial).put("id", id).put("timeZone", "America/New_York")
         .put("acceptedReadings", JSONArray().put(JSONObject().put("measuredAt",

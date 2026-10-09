@@ -15,6 +15,7 @@ import javax.crypto.spec.GCMParameterSpec
 
 class SecureStore(context: Context) {
     private val captures = IngestionCaptureStore(java.io.File(context.filesDir, "measurement-support"))
+    private val confirmedDailySummaries by lazy { captures.confirmedDailySummaryIdentities() }
     fun captureIngestion(record: JSONObject) = captures.record(record)
     fun supportData(): String = captures.export(selectedDevice(), BuildConfig.VERSION_NAME)
 
@@ -214,14 +215,20 @@ class SecureStore(context: Context) {
                 add(parsed)
             }
         }
-        val merged = HistoryMerge.merge(parsed.filter { MeasurementValidity.isNotFuture(it.second) })
+        val removedSummaries = parsed.filter { (serial, m) -> summaryIdentity(serial, m) in confirmedDailySummaries }
+        val merged = HistoryMerge.merge(parsed.filter { (serial, m) ->
+            MeasurementValidity.isNotFuture(m) && summaryIdentity(serial, m) !in confirmedDailySummaries
+        })
         // Repair already-saved duplicate/partial rows on the first read after upgrade.
         if (merged != parsed) {
             val updated = JSONArray()
             merged.forEach { (serial, measurement) -> updated.put(measurementJson(serial, measurement)) }
             prefs.edit().putString("measurement_history", updated.toString()).apply()
-            if (parsed.any { !MeasurementValidity.isNotFuture(it.second) }) {
-                if (lastMeasurementEpochMs()?.let { it > Instant.now().plusSeconds(300).toEpochMilli() } == true) {
+            if (parsed.any { !MeasurementValidity.isNotFuture(it.second) } || removedSummaries.isNotEmpty()) {
+                val removedAnchor = removedSummaries.any { (serial, m) ->
+                    serial.equals(selectedDevice(), true) && m.measuredAt.toEpochMilli() == lastMeasurementEpochMs()
+                }
+                if (removedAnchor || lastMeasurementEpochMs()?.let { it > Instant.now().plusSeconds(300).toEpochMilli() } == true) {
                     prefs.edit().remove("last_measurement_ms").remove("last_fingerprint").remove("last_kh").remove("next_poll_ms").apply()
                     merged.firstOrNull { it.first.equals(selectedDevice(), true) }?.second?.let {
                         setLastMeasurementEpochMs(it.measuredAt.toEpochMilli()); setLastFingerprint(it.fingerprint); setLastKh(it.kh)
