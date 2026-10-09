@@ -224,8 +224,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 24
-versionName = "0.8.13"
+versionCode = 25
+versionName = "0.8.14"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -345,3 +345,11 @@ Controller status is now used only for settings. Current readings and notificati
 The app automatically retains bounded, credential-redacted evidence from polling, Home, manual refresh, connection setup, and history writes. Config → Export support data saves those captures without making another server request. The temporary chart JSON-download button has been removed.
 
 The cause of the reported 08:00 averaged reading is still under investigation; this release does not claim a confirmed fix for that symptom or delete previously cached past readings. Install over an existing signed version to preserve history and settings.
+
+## 0.8.14 Raw measurements and dosing dashboard
+
+- Fix daily average rows appearing at 8 AM Eastern: graph imports now use one-day requests instead of the year query that returns daily summaries. Longer charts use saved individual readings.
+- Automatically remove cached daily summaries that exactly match retained support evidence, protecting timestamps present in raw captures and genuine 8 AM measurements. Repair polling anchors affected by removed summaries and stop counting their daily dosing totals twice.
+- Add an animated dosing beaker with percentage full, remaining mL, and a saved full-container volume for each controller. Updating the full volume immediately updates the displayed total and fill level.
+- Add a yellow sparkline beside Today's Dosing; dosing totals show whole mL while calculations retain full precision.
+- Keep the pill-shaped bottom menu and round the selected square's corners further.

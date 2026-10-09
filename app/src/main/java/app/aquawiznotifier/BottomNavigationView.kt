@@ -103,10 +103,10 @@ class BottomNavigationView(context: Context, showStatus: Boolean, private val on
             item.view.background = RippleDrawable(
                 ColorStateList.valueOf(0x220089FF),
                 GradientDrawable().apply {
-                    cornerRadius = dp(12).toFloat()
+                    cornerRadius = dp(16).toFloat()
                     setColor(if (active) 0xFF0089FF.toInt() else Color.TRANSPARENT)
                 },
-                GradientDrawable().apply { cornerRadius = dp(12).toFloat(); setColor(Color.WHITE) }
+                GradientDrawable().apply { cornerRadius = dp(16).toFloat(); setColor(Color.WHITE) }
             )
         }
     }
