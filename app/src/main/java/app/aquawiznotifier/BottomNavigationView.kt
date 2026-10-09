@@ -39,6 +39,8 @@ class BottomNavigationView(context: Context, showStatus: Boolean, private val on
     private var selectedSection = "home"
     private var bottomInset = 0
     private val systemBarPaint = Paint().apply { color = Color.BLACK }
+    private var resizeAnimator: android.animation.ValueAnimator? = null
+    private var animatedWidth: Int? = null
 
     init {
         setPadding(dp(12), dp(8), dp(12), dp(8))
@@ -112,13 +114,34 @@ class BottomNavigationView(context: Context, showStatus: Boolean, private val on
     }
 
     fun setStatusVisible(visible: Boolean) {
+        val statusView = items.getValue("status").view
+        val changed = (statusView.visibility == View.VISIBLE) != visible
+        val startWidth = pill.width
+        resizeAnimator?.cancel(); resizeAnimator = null; animatedWidth = null
         items.getValue("status").view.visibility = if (visible) View.VISIBLE else View.GONE
         if (!visible && selectedSection == "status") {
             select("home")
             onSelect("home")
         }
+        if (changed && isAttachedToWindow && isShown && isLaidOut && startWidth > 0 && android.animation.ValueAnimator.areAnimatorsEnabled()) {
+            val count = items.values.count { it.view.visibility == View.VISIBLE }
+            val available = (width - paddingLeft - paddingRight).coerceAtLeast(0)
+            val target = desiredWidth(count).coerceAtMost(available)
+            resizeAnimator = android.animation.ValueAnimator.ofInt(startWidth, target).apply {
+                duration = 260
+                interpolator = android.view.animation.DecelerateInterpolator()
+                addUpdateListener { animatedWidth = it.animatedValue as Int; requestLayout() }
+                addListener(object : android.animation.AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: android.animation.Animator) { animatedWidth = null; resizeAnimator = null; requestLayout() }
+                })
+                start()
+            }
+        }
         requestLayout()
     }
+    override fun onDetachedFromWindow() { resizeAnimator?.cancel(); animatedWidth = null; super.onDetachedFromWindow() }
+
+    private fun desiredWidth(count: Int) = dp((64 * resources.configuration.fontScale.coerceAtLeast(1f)).roundToInt()) * count + dp(16)
 
     fun setBottomInset(inset: Int) {
         if (bottomInset == inset) return
@@ -135,7 +158,7 @@ class BottomNavigationView(context: Context, showStatus: Boolean, private val on
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val count = items.values.count { it.view.visibility == View.VISIBLE }
-        val desired = dp((64 * resources.configuration.fontScale.coerceAtLeast(1f)).roundToInt()) * count + dp(16)
+        val desired = animatedWidth ?: desiredWidth(count)
         val available = if (MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.UNSPECIFIED) desired
             else (MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight).coerceAtLeast(0)
         pill.layoutParams.width = desired.coerceAtMost(available)

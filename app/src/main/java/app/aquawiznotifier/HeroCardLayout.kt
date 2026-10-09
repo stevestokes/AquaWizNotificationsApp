@@ -7,7 +7,7 @@ import android.graphics.RectF
 import android.widget.LinearLayout
 
 /** Draws one solid 1dp border at the actual card bounds, after clipped child content. */
-class HeroCardLayout(context: Context, private val cornerRadius: Int = 18) : LinearLayout(context) {
+class HeroCardLayout(context: Context, private val cornerRadius: Int = 18) : ShimmerLayout(context, cornerRadius) {
     private val radius = AwUi.dp(context, cornerRadius).toFloat()
     private val borderWidth = resources.displayMetrics.density
     init {

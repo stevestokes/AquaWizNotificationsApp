@@ -14,6 +14,23 @@ import kotlin.math.abs
 import kotlin.math.max
 
 class HomeChartView(context: Context) : View(context) {
+    private var reveal = 1f
+    private var revealAnimator: android.animation.ValueAnimator? = null
+    fun revealLines() {
+        revealAnimator?.cancel()
+        if (!isShown || !android.animation.ValueAnimator.areAnimatorsEnabled()) { reveal = 1f; invalidate(); return }
+        reveal = 0f
+        revealAnimator = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 650
+            interpolator = android.view.animation.DecelerateInterpolator()
+            addUpdateListener { reveal = it.animatedValue as Float; invalidate() }; start()
+        }
+    }
+    override fun onVisibilityAggregated(visible: Boolean) {
+        super.onVisibilityAggregated(visible)
+        if (visible) revealLines() else { revealAnimator?.cancel(); reveal = 1f }
+    }
+    override fun onDetachedFromWindow() { revealAnimator?.cancel(); super.onDetachedFromWindow() }
     private val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.GRAY; textSize = sp(11f) }
     private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFE7E7E7.toInt(); strokeWidth = dp(1f) }
     private val markerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.GRAY; strokeWidth = dp(1f) }
@@ -63,6 +80,7 @@ class HomeChartView(context: Context) : View(context) {
         limits = lowLimit to highLimit
         targetKh = target
         selected = selectedTime?.let { time -> items.indexOfFirst { it.measuredAt == time }.takeIf { it >= 0 } }
+        revealLines()
         invalidate()
     }
     private fun timeWindow(): Pair<Long, Long> {
@@ -139,7 +157,7 @@ class HomeChartView(context: Context) : View(context) {
                 }
             }
             canvas.save()
-            canvas.clipRect(left - dp(4f), top - dp(4f), right + dp(4f), bottom + dp(4f))
+            canvas.clipRect(left - dp(4f), top - dp(4f), left + (right - left) * reveal + dp(4f), bottom + dp(4f))
             val path = Path()
             val group = mutableListOf<ChartCurve.Point>()
             fun finishGroup() {

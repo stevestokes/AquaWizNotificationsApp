@@ -37,6 +37,7 @@ class MainActivity : Activity() {
     private lateinit var configSection: View
     private lateinit var bottomNavigation: BottomNavigationView
     private var currentSection = "config"
+    private var hasSelectedSection = false
 
     private lateinit var username: EditText
     private lateinit var connectButton: Button
@@ -210,11 +211,31 @@ class MainActivity : Activity() {
     }
 
     private fun showSection(section: String) {
+        val previous = currentSection
+        val views = linkedMapOf("home" to homeRefresh, "history" to historySection, "status" to statusSection, "config" to configSection)
+        val incoming = views[section] ?: return
+        val outgoing = views[previous]
+        val contentWidth = (incoming.parent as? View)?.width ?: 0
+        val animate = hasSelectedSection && previous != section && contentWidth > 0 && android.animation.ValueAnimator.areAnimatorsEnabled()
         currentSection = section
-        homeRefresh.visibility = if (section == "home") View.VISIBLE else View.GONE
-        statusSection.visibility = if (section == "status") View.VISIBLE else View.GONE
-        historySection.visibility = if (section == "history") View.VISIBLE else View.GONE
-        configSection.visibility = if (section == "config") View.VISIBLE else View.GONE
+        hasSelectedSection = true
+        views.values.forEach { view ->
+            view.animate().cancel(); view.animate().withEndAction(null)
+            view.translationX = 0f; view.alpha = 1f
+            view.visibility = if (view === incoming || (animate && view === outgoing)) View.VISIBLE else View.GONE
+            view.importantForAccessibility = if (view === incoming) View.IMPORTANT_FOR_ACCESSIBILITY_AUTO else View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        }
+        if (animate && outgoing != null) {
+            val order = views.keys.toList()
+            val direction = if (order.indexOf(section) > order.indexOf(previous)) 1f else -1f
+            val distance = contentWidth.toFloat()
+            incoming.translationX = direction * distance
+            incoming.animate().translationX(0f).setDuration(240).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+            outgoing.animate().translationX(-direction * distance).setDuration(240)
+                .setInterpolator(android.view.animation.DecelerateInterpolator()).withEndAction {
+                    if (currentSection != previous) { outgoing.visibility = View.GONE; outgoing.translationX = 0f }
+                }.start()
+        }
 
         bottomNavigation.select(section)
         if (section == "config") updateConnectionState()
@@ -304,34 +325,8 @@ class MainActivity : Activity() {
             return
         }
         manualRefreshInFlight = true
-        val baseUrl = store.baseUrl()
-        fun current() = store.session()?.accessToken == session.accessToken &&
-            store.selectedDevice() == serial && store.baseUrl() == baseUrl
-        kotlin.concurrent.thread(name = "AquaWizPullRefresh") {
-            var message = "Measurements refreshed"
-            try {
-                val api = AquaWizApi(baseUrl, store::captureIngestion, "refresh")
-                try {
-                    val latest = api.latestMeasurement(session, serial) { if (current()) store.saveDeviceSummary(serial, it) }
-                    if (current()) store.saveMeasurement(serial, latest)
-                } catch (e: AquaWizApi.ApiException) {
-                    if (e.status == 401 || e.status == 403) throw e
-                    message = "History refreshed; current status unavailable"
-                } catch (e: Exception) { message = "History refreshed; current status unavailable" }
-                // Long queries return daily summaries; retain local history and import raw recent tests.
-                val readings = api.graphMeasurements(session, serial, Instant.now().minusSeconds(AquaWizApi.RAW_GRAPH_WINDOW_SECONDS))
-                if (current()) store.saveMeasurements(serial, readings)
-            } catch (e: Exception) {
-                if (current()) {
-                    val authFailure = e is AquaWizApi.ApiException && (e.status == 401 || e.status == 403)
-                    if (authFailure) { store.setAuthPaused(true); store.clearNextPollEpochMs(); PollScheduler.cancel(this) }
-                    store.appendActivity("Pull refresh failed: " + (e.message ?: e.javaClass.simpleName))
-                    message = if (authFailure) "Session expired. Reconnect in Config" else "Refresh failed. Showing saved readings"
-                }
-            }
-            runOnUiThread {
-                if (!isFinishing && !isDestroyed) finish(if (current()) message else "Connection changed; showing saved readings")
-            }
+        homeSection.refreshAsync { message ->
+            if (!isFinishing && !isDestroyed) finish(message)
         }
     }
 

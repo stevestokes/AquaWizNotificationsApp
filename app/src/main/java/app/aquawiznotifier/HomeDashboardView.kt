@@ -18,6 +18,9 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
     enum class Range(val label: String, val seconds: Long) {
         DAY("1D", 86400), THREE_DAYS("3D", 259200), WEEK("1W", 604800), MONTH("1M", 2592000), YEAR("1Y", 31536000)
     }
+    private val readingPanels = mutableListOf<ShimmerLayout>()
+    private val settingsPanels = mutableListOf<ShimmerLayout>()
+    private val refreshCallbacks = mutableListOf<(String) -> Unit>()
     private val regular = resources.getFont(R.font.aw_regular)
     private val bold = resources.getFont(R.font.aw_extrabold)
     private val root = LinearLayout(context).apply {
@@ -67,12 +70,16 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
             super.onMeasure(widthMeasureSpec, heightMeasureSpec)
         }
     }
-    fun onShown() { refreshFromLocal(); refreshFromApi() }
+    fun onShown() { refreshFromLocal(); chart.revealLines(); refreshFromApi() }
+    fun refreshAsync(done: (String) -> Unit) = refreshFromApi(force = true, onComplete = done)
     fun refreshFromLocal() {
         val identity = Triple(store.baseUrl(), store.selectedDevice(), store.session()?.accessToken)
         if (identity != sessionIdentity) {
+            readingPanels.forEach { it.isLoading = false }; settingsPanels.forEach { it.isLoading = false }
+            val callbacks = refreshCallbacks.toList(); refreshCallbacks.clear()
             generation++; inFlight = false; fetchedKey = null; points = emptyList(); pointsDevice = null
             displaySignature = null; sessionIdentity = identity; chart.resetZoom()
+            callbacks.forEach { it("Connection changed; showing saved readings") }
         }
         val serial = store.selectedDevice().orEmpty()
         val all = store.measurementHistory().filter { it.first.equals(serial, true) }.map { it.second }
@@ -115,7 +122,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
             orientation = LinearLayout.HORIZONTAL; background = DiagonalHero()
             clipToOutline = true; setPadding(dp(1), dp(1), dp(1), dp(1))
         }
-        val kh = LinearLayout(context).apply {
+        val kh = ShimmerLayout(context).apply { readingPanels.add(this)
             orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(12), dp(12))
             addView(label("KH", 14f, Color.DKGRAY).apply { gravity = Gravity.CENTER_VERTICAL }, fullHeight(26))
             addView(valueWithUnit(khValue, "dKH", Color.BLACK), fullHeight(58))
@@ -123,7 +130,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
             khTime.setAutoSizeTextTypeUniformWithConfiguration(8, 10, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
             addView(khTime, fullHeight(26))
         }
-        val ph = LinearLayout(context).apply {
+        val ph = ShimmerLayout(context).apply { readingPanels.add(this)
             orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(12), dp(12))
             phTitle.gravity = Gravity.CENTER_VERTICAL; phTitle.setSingleLine(true); phTitle.setPadding(dp(12), 0, 0, 0)
             phTitle.setAutoSizeTextTypeUniformWithConfiguration(10, 14, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
@@ -140,7 +147,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         root.addView(hero, full().apply { bottomMargin = dp(8) })
         val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
         row.addView(card("KH Target", khTarget, "dKH"), weighted(true))
-        row.addView(HeroCardLayout(context).apply {
+        row.addView(HeroCardLayout(context).apply { settingsPanels.add(this)
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(10), dp(2), dp(6), dp(2))
             addView(AwUi.button(context, "Calibrate").apply {
@@ -208,46 +215,68 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         toggles.forEach { (series, toggle) -> toggle.text = series.label + " " + (series.value(m)?.let { "%.2f".format(it) } ?: "—") }
     }
     private fun applyChartPreferences() = chart.setSeriesVisibility(ChartSeries.values().filter { store.chartVisible(it) }.toSet(), ChartSeries.values().associateWith { store.chartLineStyle(it) })
-    private fun refreshFromApi(force: Boolean = false) {
-        val session = store.session() ?: run { syncStatus.text = "Connect AquaWiz in Config"; return }
-        val serial = store.selectedDevice()?.takeIf { it.isNotBlank() } ?: return
-        if (store.authPaused()) { syncStatus.text = "Session expired. Reconnect using Web Login in Config."; return }
+    private fun refreshFromApi(force: Boolean = false, onComplete: ((String) -> Unit)? = null) {
+        val session = store.session()
+        val serial = store.selectedDevice()
+        if (session == null || serial.isNullOrBlank() || store.authPaused()) {
+            val message = "Reconnect using Web Login in Config"
+            syncStatus.text = message; onComplete?.invoke(message); return
+        }
+        onComplete?.let { refreshCallbacks.add(it) }
+        if (inFlight) return
         val baseUrl = store.baseUrl()
         val key = serial + baseUrl + selectedRange.name
-        if (inFlight || (!force && fetchedKey == key && System.currentTimeMillis() - lastFetch < 60000)) return
+        if (!force && fetchedKey == key && System.currentTimeMillis() - lastFetch < 60000) return
         val requestGeneration = ++generation
-        val range = selectedRange
         inFlight = true
+        readingPanels.forEach { it.isLoading = true }; settingsPanels.forEach { it.isLoading = true }
         syncStatus.text = "Refreshing AquaWiz…"
-        fun current() = requestGeneration == generation && store.session()?.accessToken == session.accessToken && store.selectedDevice() == serial && store.baseUrl() == baseUrl
-        thread(name = "AquaWizHome") {
-            var summaryError: String? = null
-            try {
-                val api = AquaWizApi(baseUrl, store::captureIngestion, "home")
-                try {
-                    val latest = api.latestMeasurement(session, serial) { if (current()) store.saveDeviceSummary(serial, it) }
-                    if (current()) store.saveMeasurement(serial, latest)
-                } catch (e: AquaWizApi.ApiException) { if (e.status == 401 || e.status == 403) throw e; summaryError = "Current status unavailable" }
-                catch (e: Exception) { summaryError = "Current status unavailable" }
-                val fetched = api.graphMeasurements(session, serial, Instant.now().minusSeconds(AquaWizApi.RAW_GRAPH_WINDOW_SECONDS))
-                if (!current()) return@thread
-                store.saveMeasurements(serial, fetched)
-                post {
-                    if (!current()) return@post
-                    points = fetched; pointsDevice = serial; fetchedKey = key; lastFetch = System.currentTimeMillis(); inFlight = false
-                    refreshFromLocal()
-                    syncStatus.text = summaryError ?: if (fetched.isEmpty()) "No history returned for this range" else "Updated " + AppDates.format(Instant.now())
+        fun current() = requestGeneration == generation && store.session()?.accessToken == session.accessToken &&
+            store.selectedDevice() == serial && store.baseUrl() == baseUrl
+        var remaining = 2
+        val errors = mutableListOf<String>()
+        fun complete(error: Throwable?, panels: List<ShimmerLayout>) {
+            if (!current()) return
+            panels.forEach { it.isLoading = false }
+            error?.let {
+                if (it is AquaWizApi.ApiException && (it.status == 401 || it.status == 403)) {
+                    store.setAuthPaused(true); store.clearNextPollEpochMs(); PollScheduler.cancel(context)
                 }
-            } catch (e: Exception) {
-                if (!current()) return@thread
-                val authFailure = e is AquaWizApi.ApiException && (e.status == 401 || e.status == 403)
-                if (authFailure) { store.setAuthPaused(true); store.clearNextPollEpochMs(); PollScheduler.cancel(context) }
-                store.appendActivity("Home refresh failed: " + (e.message ?: e.javaClass.simpleName))
-                post {
-                    if (!current()) return@post
-                    inFlight = false; refreshFromLocal()
-                    syncStatus.text = if (authFailure) "Session expired. Reconnect using Web Login in Config." else "Refresh failed. Showing saved readings. Pull down to retry."
-                }
+                errors.add(it.message ?: "Refresh failed")
+            }
+            refreshFromLocal()
+            if (--remaining == 0) {
+                inFlight = false
+                if (errors.isEmpty()) { fetchedKey = key; lastFetch = System.currentTimeMillis() }
+                val message = if (store.authPaused()) "Session expired. Reconnect using Web Login in Config."
+                    else if (errors.isNotEmpty()) "Refresh incomplete. Showing saved values where needed."
+                    else "Measurements refreshed"
+                syncStatus.text = if (errors.isEmpty()) "Updated " + AppDates.format(Instant.now()) else message
+                if (errors.isNotEmpty()) store.appendActivity("Home refresh: " + errors.joinToString("; "))
+                val callbacks = refreshCallbacks.toList(); refreshCallbacks.clear()
+                callbacks.forEach { it(message) }
+            }
+        }
+        thread(name = "AquaWizHeroSettings") {
+            val result = runCatching {
+                val summary = DeviceSummaryJson.parse(AquaWizApi(baseUrl).rawAllFields(session, serial), serial)
+                    ?: error("Controller settings unavailable")
+                if (current()) store.saveDeviceSummary(serial, summary)
+            }
+            post { complete(result.exceptionOrNull(), settingsPanels) }
+        }
+        thread(name = "AquaWizHeroReadings") {
+            val result = runCatching {
+                val fetched = AquaWizApi(baseUrl, store::captureIngestion, if (force) "refresh" else "home")
+                    .graphMeasurements(session, serial, Instant.now().minusSeconds(AquaWizApi.RAW_GRAPH_WINDOW_SECONDS))
+                if (current()) store.saveMeasurements(serial, fetched)
+                fetched
+            }
+            post {
+                if (!current()) return@post
+                result.getOrNull()?.let { points = it; pointsDevice = serial }
+                complete(result.exceptionOrNull(), readingPanels)
+                if (result.isSuccess) chart.revealLines()
             }
         }
     }
@@ -401,6 +430,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         dialog.show()
     }
     private fun card(title: String, value: TextView, unit: String) = HeroCardLayout(context).apply {
+        if (title == "Today's Dosing") readingPanels.add(this) else settingsPanels.add(this)
         orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(10), dp(4), dp(6), dp(4))
         addView(LinearLayout(context).apply {

@@ -50,6 +50,7 @@ Account names and device ID suffixes are redacted.
 - GitHub Releases update checker with an Android notification when a newer app version is available.
 - Manual **Check for updates** button.
 - Manual update checks re-show the update notification whenever a newer release is available, even after dismissal. Automatic checks notify once per release version.
+- Refresh loads controller settings and raw measurements independently, with a shimmer on each pending hero panel. Charts reveal their lines from left to right on load and range changes; tab navigation slides in the selected direction, and toggling Status animates the menu width. Android's disabled-animation setting is respected.
 - Test notification uses the most recent real stored measurement when available; before the first real reading it uses one of several normal sample measurements.
 - GitHub and Reef2Reef links directly in the app.
 - Measurement notifications open AquaWiz Notifier when tapped, bringing its existing screen to the foreground when it is already open.
