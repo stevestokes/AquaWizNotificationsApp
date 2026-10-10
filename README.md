@@ -226,8 +226,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 27
-versionName = "0.8.16"
+versionCode = 28
+versionName = "0.8.17"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -370,6 +370,6 @@ The cause of the reported 08:00 averaged reading is still under investigation; t
 - Slow the shimmer sweep to 1.6 seconds and keep loading overlays visible for at least one sweep on fast refreshes. Data requests and updates still finish immediately.
 - Show the same shimmer over the History data table during manual refresh. Respect disabled system animations and cancel pending overlay work when detached.
 
-## Unreleased
+## 0.8.17 Chart reveal fix
 
 - Fix the chart reveal restarting when changing date ranges. Range buttons filter retained individual readings without forcing another server fetch; overlapping reveal requests keep the current animation progressing. Settings-only updates no longer replay the lines.
