@@ -17,6 +17,9 @@ class HomeChartView(context: Context) : View(context) {
     private var reveal = 1f
     private var revealAnimator: android.animation.ValueAnimator? = null
     fun revealLines() {
+        // Data, visibility and navigation can request a reveal in the same frame.
+        // Keep the current sweep progressing instead of jumping back to the left.
+        if (revealAnimator?.isStarted == true) return
         revealAnimator?.cancel()
         if (!isShown || !android.animation.ValueAnimator.areAnimatorsEnabled()) { reveal = 1f; invalidate(); return }
         reveal = 0f
@@ -75,12 +78,13 @@ class HomeChartView(context: Context) : View(context) {
     fun setMeasurements(measurements: List<Measurement>, lowLimit: Double? = null, highLimit: Double? = null, target: Double? = null) {
         val sorted = HistoryMerge.merge(measurements.map { "chart" to it }).map { it.second }.sortedBy { it.measuredAt }
         if (items == sorted && limits == (lowLimit to highLimit) && targetKh == target) return
+        val readingsChanged = items != sorted
         val selectedTime = selected?.let { items.getOrNull(it)?.measuredAt }
         items = sorted
         limits = lowLimit to highLimit
         targetKh = target
         selected = selectedTime?.let { time -> items.indexOfFirst { it.measuredAt == time }.takeIf { it >= 0 } }
-        revealLines()
+        if (readingsChanged) revealLines()
         invalidate()
     }
     private fun timeWindow(): Pair<Long, Long> {

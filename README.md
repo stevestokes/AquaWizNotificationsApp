@@ -369,3 +369,7 @@ The cause of the reported 08:00 averaged reading is still under investigation; t
 - Swipe left or right between visible screens, using the same directional transitions as the bottom menu. Hidden Status is skipped and navigation stops at either end. Chart inspection and zoom retain their gestures.
 - Slow the shimmer sweep to 1.6 seconds and keep loading overlays visible for at least one sweep on fast refreshes. Data requests and updates still finish immediately.
 - Show the same shimmer over the History data table during manual refresh. Respect disabled system animations and cancel pending overlay work when detached.
+
+## Unreleased
+
+- Fix the chart reveal restarting when changing date ranges. Range buttons filter retained individual readings without forcing another server fetch; overlapping reveal requests keep the current animation progressing. Settings-only updates no longer replay the lines.

@@ -198,7 +198,11 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         Range.values().forEach { range ->
             val button = AwUi.button(context, range.label).apply {
                 textSize = 13f; setPadding(0, 0, 0, 0)
-                setOnClickListener { selectedRange = range; store.setChartRange(range.name); generation++; inFlight = false; chart.resetZoom(); refreshFromLocal(); refreshFromApi(force = true) }
+                setOnClickListener {
+                    if (selectedRange == range) return@setOnClickListener
+                    selectedRange = range; store.setChartRange(range.name)
+                    chart.resetZoom(); refreshFromLocal(); chart.revealLines()
+                }
             }
             buttons[range] = button
             ranges.addView(button, LinearLayout.LayoutParams(0, dp(36), 1f).apply { setMargins(dp(2), 0, dp(2), 0) })
@@ -225,7 +229,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         onComplete?.let { refreshCallbacks.add(it) }
         if (inFlight) return
         val baseUrl = store.baseUrl()
-        val key = serial + baseUrl + selectedRange.name
+        val key = serial + baseUrl
         if (!force && fetchedKey == key && System.currentTimeMillis() - lastFetch < 60000) return
         val requestGeneration = ++generation
         inFlight = true
