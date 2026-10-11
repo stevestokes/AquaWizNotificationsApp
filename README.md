@@ -373,3 +373,7 @@ The cause of the reported 08:00 averaged reading is still under investigation; t
 ## 0.8.17 Chart reveal fix
 
 - Fix the chart reveal restarting when changing date ranges. Range buttons filter retained individual readings without forcing another server fetch; overlapping reveal requests keep the current animation progressing. Settings-only updates no longer replay the lines.
+
+## Unreleased
+
+- Fix blank KH Target, dosing settings, and probe health when the device-scoped settings response uses a tank name in `serial`. Preserve explicit controller-ID checks and reject ambiguous responses.

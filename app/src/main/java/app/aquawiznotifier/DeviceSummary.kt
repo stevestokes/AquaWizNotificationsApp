@@ -29,7 +29,14 @@ object DeviceSummaryJson {
                 is JSONArray -> for (i in 0 until value.length()) walk(value.opt(i), inheritedSerial)
                 is JSONObject -> {
                     val ownSerial = MeasurementJson.serialKeys.firstNotNullOfOrNull { key ->
-                        value.optString(key).takeIf { it.isNotBlank() && it != "null" }
+                        value.optString(key).takeIf { id ->
+                            id.isNotBlank() && id != "null" &&
+                                // The device-scoped all_field response can use serial as a tank label.
+                                // Only accept this at the response root; explicit IDs and multi-device
+                                // payloads must still match the requested controller.
+                                !(value === root && key == "serial" &&
+                                    !id.equals(serial, true) && !id.startsWith("KH", true) && !id.startsWith("CA", true))
+                        }
                     } ?: inheritedSerial
                     if (listOf("field8", "field10", "field15", "latest_ph", "field14").any { value.has(it) }) candidates += ownSerial to value
                     val keys = value.keys()
