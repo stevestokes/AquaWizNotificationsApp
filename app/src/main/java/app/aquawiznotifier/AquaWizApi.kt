@@ -16,6 +16,8 @@ class AquaWizApi(
     private val baseUrl: String = GLOBAL_BASE,
     private val capture: ((JSONObject) -> Unit)? = null,
     private val source: String = "unspecified",
+    private val diagnostics: Boolean = BuildConfig.VERSION_NAME.contains("diagnostic"),
+    private val openConnection: (String) -> HttpURLConnection = { URI(it).toURL().openConnection() as HttpURLConnection },
 ) {
     data class TargetReadback(val summary: DeviceSummary?, val matches: Boolean, val error: Throwable? = null)
     companion object {
@@ -60,12 +62,16 @@ class AquaWizApi(
             .put("user", session.username)
             .put("token", JSONObject().put("access_token", session.accessToken))
             .toString()
-        return request(
+        val raw = request(
             "POST",
             "$baseUrl/api/v1/KH/$encodedSerial/all_field",
             token = session.accessToken,
             body = body,
+            serial = serial,
         )
+        diagnostic(JSONObject().put("type", "settings-parse").put("serial", serial)
+            .put("identified", DeviceSummaryJson.parse(raw, serial) != null))
+        return raw
     }
 
     /** Official app graph route recovered from AquaWiz APK. */
@@ -75,7 +81,7 @@ class AquaWizApi(
     fun rawGraph(session: Session, serial: String, since: Instant): String {
         val encodedSerial = URLEncoder.encode(serial.trim().uppercase(), StandardCharsets.UTF_8.toString()).replace("+", "%20")
         val encodedDate = URLEncoder.encode(since.toString(), StandardCharsets.UTF_8.toString())
-        return request("GET", "$baseUrl/api/v1/query/device/$encodedSerial/graph?date=$encodedDate", token = session.accessToken)
+        return request("GET", "$baseUrl/api/v1/query/device/$encodedSerial/graph?date=$encodedDate", token = session.accessToken, serial = serial)
     }
 
     fun graphMeasurements(session: Session, serial: String, since: Instant): List<Measurement> {
@@ -107,27 +113,17 @@ class AquaWizApi(
         return rows
     }
 
-    private fun redactExportCredentials(value: Any?): Any? {
-        when (value) {
-            is JSONObject -> value.keys().asSequence().toList().forEach { key ->
-                val name = key.lowercase(java.util.Locale.ROOT)
-                if (listOf("token", "passcode", "password", "secret", "credential").any { name.contains(it) } || name.endsWith("_pw")) {
-                    value.put(key, "[REDACTED]")
-                } else value.put(key, redactExportCredentials(value.opt(key)))
-            }
-            is JSONArray -> for (i in 0 until value.length()) value.put(i, redactExportCredentials(value.opt(i)))
-        }
-        return value
-    }
+    private fun redactExportCredentials(value: Any?): Any? =
+        value?.let { DiagnosticRedaction.body(it.toString(), null) }
 
     fun setTrueTankKh(session: Session, serial: String, value: java.math.BigDecimal) {
         request("POST", baseUrl + KhCalibration.PATH, token = session.accessToken,
-            body = KhCalibration.body(session, serial, value).toString())
+            body = KhCalibration.body(session, serial, value).toString(), serial = serial)
     }
 
     fun setKhTarget(session: Session, serial: String, settings: KhTargetSettings) {
         request("POST", baseUrl + KhCalibration.PATH, token = session.accessToken,
-            body = KhDeviceSettings.targetBody(session, serial, settings).toString())
+            body = KhDeviceSettings.targetBody(session, serial, settings).toString(), serial = serial)
     }
 
     /** A successful write acknowledges the request; it does not prove the controller applied it. */
@@ -145,28 +141,59 @@ class AquaWizApi(
 
     fun setKhDosing(session: Session, serial: String, settings: KhDosingSettings, current: DeviceSummary) {
         request("POST", baseUrl + KhCalibration.PATH, token = session.accessToken,
-            body = KhDeviceSettings.dosingBody(session, serial, settings, current).toString())
+            body = KhDeviceSettings.dosingBody(session, serial, settings, current).toString(), serial = serial)
     }
 
-    private fun request(method: String, url: String, token: String? = null, body: String? = null): String {
-        val conn = (URI(url).toURL().openConnection() as HttpURLConnection).apply {
-            requestMethod = method
-            connectTimeout = 15_000
-            readTimeout = 20_000
-            setRequestProperty("Accept", "application/json")
-            setRequestProperty("Content-Type", "application/json")
-            if (!token.isNullOrBlank()) setRequestProperty("Authorization", "Bearer $token")
-            if (body != null) doOutput = true
+    private fun diagnostic(record: JSONObject) {
+        if (diagnostics) runCatching {
+            capture?.invoke(record.put("capturedAt", Instant.now().toString()).put("source", source))
         }
+    }
+
+    private fun request(method: String, url: String, token: String? = null, body: String? = null, serial: String): String {
+        val id = java.util.UUID.randomUUID().toString()
+        val started = System.nanoTime()
+        // Never export authentication headers, cookies, or raw non-JSON error pages.
+        val safeBody = DiagnosticRedaction.body(body, token)
+        val metadata = JSONObject().put("requestId", id).put("serial", serial)
+            .put("method", method).put("url", url).put("authenticated", !token.isNullOrBlank())
+            .put("requestBody", safeBody)
+        diagnostic(JSONObject(metadata.toString()).put("type", "http-start"))
+        var conn: HttpURLConnection? = null
+        var status: Int? = null
         try {
-            if (body != null) conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-            val status = conn.responseCode
-            val text = (if (status in 200..299) conn.inputStream else conn.errorStream)
+            val connection = openConnection(url)
+            conn = connection
+            connection.requestMethod = method
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 20_000
+            connection.setRequestProperty("Accept", "application/json")
+            connection.setRequestProperty("Content-Type", "application/json")
+            if (!token.isNullOrBlank()) connection.setRequestProperty("Authorization", "Bearer $token")
+            if (body != null) {
+                connection.doOutput = true
+                connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            }
+            status = connection.responseCode
+            val text = (if (status in 200..299) connection.inputStream else connection.errorStream)
                 ?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (status !in 200..299) throw ApiException(status, "AquaWiz HTTP $status${if (text.isNotBlank()) ": ${text.take(500)}" else ""}")
+            val headers = JSONObject()
+            listOf("Content-Type", "Date", "Retry-After", "X-Request-ID").forEach { key ->
+                connection.getHeaderField(key)?.let { headers.put(key, DiagnosticRedaction.text(it, token)) }
+            }
+            diagnostic(JSONObject(metadata.toString()).put("type", "http-response").put("status", status)
+                .put("durationMs", (System.nanoTime() - started) / 1_000_000)
+                .put("responseHeaders", headers).put("responseBytes", text.toByteArray(Charsets.UTF_8).size)
+                .put("responseBody", DiagnosticRedaction.body(text, token)))
+            if (status !in 200..299) throw ApiException(status, "AquaWiz HTTP $status")
             return text
+        } catch (error: Exception) {
+            diagnostic(JSONObject(metadata.toString()).put("type", "http-failure").put("status", status ?: JSONObject.NULL)
+                .put("durationMs", (System.nanoTime() - started) / 1_000_000)
+                .put("errorType", error.javaClass.simpleName))
+            throw error
         } finally {
-            conn.disconnect()
+            conn?.disconnect()
         }
     }
 

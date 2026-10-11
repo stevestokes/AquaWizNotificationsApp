@@ -14,10 +14,22 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 class SecureStore(context: Context) {
-    private val captures = IngestionCaptureStore(java.io.File(context.filesDir, "measurement-support"))
+    private val captures = IngestionCaptureStore(java.io.File(context.filesDir, "measurement-support"),
+        recentLimit = if (BuildConfig.VERSION_NAME.contains("diagnostic")) 256 else 64)
     private val confirmedDailySummaries by lazy { captures.confirmedDailySummaryIdentities() }
     fun captureIngestion(record: JSONObject) = captures.record(record)
-    fun supportData(): String = captures.export(selectedDevice(), BuildConfig.VERSION_NAME)
+    fun supportData(): String = JSONObject(captures.export(selectedDevice(), BuildConfig.VERSION_NAME))
+        .put("diagnosticBuild", BuildConfig.VERSION_NAME.contains("diagnostic"))
+        .put("state", JSONObject().put("authPaused", authPaused()).put("hasSession", session() != null)
+            .put("lastPollEpochMs", lastPollEpochMs()).put("nextPollEpochMs", nextPollEpochMs())
+            .put("androidSdk", android.os.Build.VERSION.SDK_INT).put("timeZone", java.time.ZoneId.systemDefault().id))
+        .toString(2)
+
+    private fun diagnosticEvent(event: String) {
+        if (BuildConfig.VERSION_NAME.contains("diagnostic")) captureIngestion(JSONObject()
+            .put("type", "session-event").put("event", event).put("serial", selectedDevice())
+            .put("capturedAt", Instant.now().toString()))
+    }
 
     private val prefs = context.getSharedPreferences("aquawiz_notifier", Context.MODE_PRIVATE)
     companion object { private val historyLock = Any(); private val activityLock = Any() }
@@ -53,6 +65,7 @@ class SecureStore(context: Context) {
     }.getOrNull()
 
     fun saveSession(session: Session) {
+        diagnosticEvent("session-saved")
         val json = JSONObject()
             .put("username", session.username)
             .put("accessToken", session.accessToken)
@@ -77,7 +90,10 @@ class SecureStore(context: Context) {
         prefs.edit().putInt("auth_method", 0).putBoolean("shared_token_mode", true).apply()
     }
 
-    fun clearSession() = prefs.edit().remove("session").apply()
+    fun clearSession() {
+        diagnosticEvent("session-cleared")
+        prefs.edit().remove("session").apply()
+    }
 
     fun clearMonitoringState() {
         prefs.edit()
@@ -107,7 +123,10 @@ class SecureStore(context: Context) {
     fun setNextPollEpochMs(v: Long) = prefs.edit().putLong("next_poll_ms", v).apply()
     fun clearNextPollEpochMs() = prefs.edit().remove("next_poll_ms").apply()
     fun authPaused(): Boolean = prefs.getBoolean("auth_paused", false)
-    fun setAuthPaused(v: Boolean) = prefs.edit().putBoolean("auth_paused", v).apply()
+    fun setAuthPaused(v: Boolean) {
+        diagnosticEvent(if (v) "monitoring-paused-auth-rejection" else "monitoring-resumed")
+        prefs.edit().putBoolean("auth_paused", v).apply()
+    }
     fun sharedTokenMode(): Boolean = prefs.getBoolean("shared_token_mode", false)
     fun setSharedTokenMode(v: Boolean) = prefs.edit().putBoolean("shared_token_mode", v).apply()
 

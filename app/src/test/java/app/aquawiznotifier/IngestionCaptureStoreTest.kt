@@ -72,4 +72,18 @@ class IngestionCaptureStoreTest {
             assertEquals(before, JSONObject(store.export("KH-A", "test")).getJSONArray("captures").length())
         } finally { directory.deleteRecursively() }
     }
+    @Test fun failuresSurviveRoutineRotationAndExportWorksAfterSessionCleared() {
+        val directory = Files.createTempDirectory("aw-auth-evidence").toFile()
+        try {
+            val store = IngestionCaptureStore(directory, recentLimit = 1)
+            store.record(JSONObject().put("type", "http-failure").put("serial", "KH-A").put("status", 401))
+            store.record(JSONObject().put("type", "session-event").put("event", "session-cleared"))
+            repeat(5) { store.record(entry(it)) }
+            val records = JSONObject(store.export(null, "diagnostic")).getJSONArray("captures")
+            assertEquals(3, records.length())
+            assertTrue((0 until records.length()).any { records.getJSONObject(it).optInt("status") == 401 })
+            assertTrue((0 until records.length()).any { records.getJSONObject(it).optString("event") == "session-cleared" })
+        } finally { directory.deleteRecursively() }
+    }
+
 }

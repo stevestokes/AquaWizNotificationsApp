@@ -226,8 +226,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 28
-versionName = "0.8.17"
+versionCode = 29
+versionName = "0.8.18-diagnostic"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -374,6 +374,10 @@ The cause of the reported 08:00 averaged reading is still under investigation; t
 
 - Fix the chart reveal restarting when changing date ranges. Range buttons filter retained individual readings without forcing another server fetch; overlapping reveal requests keep the current animation progressing. Settings-only updates no longer replay the lines.
 
-## Unreleased
+## 0.8.18-diagnostic Support logging
+
+Signed diagnostic prerelease for reproducing settings and session failures. Config's existing Export support data button includes redacted HTTP start/response/failure records, request IDs, endpoint, method, HTTP status, safe response headers, request/response JSON, timings, settings parser outcome, session state events, and current monitoring state. No additional requests or automatic login retries are introduced. Credentials, cookies, usernames and non-JSON response pages are omitted. Records stay in private app storage, bounded to 8 MiB; recent failures have separate retention. Export before clearing app data. This prerelease does not replace the latest public download.
+
+Includes the controller settings label fix:
 
 - Fix blank KH Target, dosing settings, and probe health when the device-scoped settings response uses a tank name in `serial`. Preserve explicit controller-ID checks and reject ambiguous responses.

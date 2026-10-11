@@ -26,13 +26,13 @@ class IngestionCaptureStore(
                 val text = record.toString()
                 // Avoid an unbounded diagnostic write from an unexpectedly large response.
                 if (text.toByteArray(Charsets.UTF_8).size > byteLimit / 2) return@runCatching
-                val marker = if (includesEightAm(record)) "eight" else "recent"
+                val marker = if (record.optString("type") in listOf("http-failure", "session-event") || record.optInt("status") in listOf(401, 403)) "failure" else if (includesEightAm(record)) "eight" else "recent"
                 val name = "${System.currentTimeMillis()}-${UUID.randomUUID()}-$marker.json"
                 val temporary = File(directory, "$name.tmp")
                 temporary.writeText(text, Charsets.UTF_8)
                 val target = File(directory, name)
                 if (!temporary.renameTo(target)) { temporary.delete(); return@runCatching }
-                listOf("recent" to recentLimit, "eight" to eightAmLimit).forEach { (kind, limit) ->
+                listOf("recent" to recentLimit, "eight" to eightAmLimit, "failure" to 32).forEach { (kind, limit) ->
                     files().filter { it.name.endsWith("-$kind.json") }.dropLast(limit).forEach { it.delete() }
                 }
                 var all = files()
@@ -49,7 +49,7 @@ class IngestionCaptureStore(
         val records = JSONArray()
         files().forEach { file ->
             runCatching { JSONObject(file.readText(Charsets.UTF_8)) }.getOrNull()?.let { record ->
-                if (serial != null && record.optString("serial").equals(serial, true)) records.put(record)
+                if (serial == null || record.optString("serial").isBlank() || record.optString("serial") == "null" || record.optString("serial").equals(serial, true)) records.put(DiagnosticRedaction.body(record.toString(), null))
             }
         }
         JSONObject().put("appVersion", version).put("exportedAt", Instant.now().toString())
