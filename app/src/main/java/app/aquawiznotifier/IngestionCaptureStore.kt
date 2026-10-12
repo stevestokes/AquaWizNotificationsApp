@@ -26,7 +26,7 @@ class IngestionCaptureStore(
                 val text = record.toString()
                 // Avoid an unbounded diagnostic write from an unexpectedly large response.
                 if (text.toByteArray(Charsets.UTF_8).size > byteLimit / 2) return@runCatching
-                val marker = if (record.optString("type") in listOf("http-failure", "session-event") || record.optInt("status") in listOf(401, 403)) "failure" else if (includesEightAm(record)) "eight" else "recent"
+                val marker = if (record.optString("type") in listOf("http-failure", "session-event", "auth-endpoint-comparison") || record.optInt("status") in listOf(401, 403)) "failure" else if (includesEightAm(record)) "eight" else "recent"
                 val name = "${System.currentTimeMillis()}-${UUID.randomUUID()}-$marker.json"
                 val temporary = File(directory, "$name.tmp")
                 temporary.writeText(text, Charsets.UTF_8)

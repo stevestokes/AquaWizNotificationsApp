@@ -57,4 +57,58 @@ class DiagnosticRequestTest {
         assertFalse(safe.contains("secret")); assertFalse(safe.contains("private")); assertTrue(safe.contains("201"))
         assertFalse(DiagnosticRedaction.body("<html>password=secret</html>", null).toString().contains("secret"))
     }
+    @Test fun settingsRejectionProbesGraphOnceWithSameTokenAndPreservesOriginalError() {
+        val records = mutableListOf<JSONObject>()
+        val urls = mutableListOf<String>()
+        val connections = mutableListOf<Connection>()
+        val api = AquaWizApi("https://example.invalid", { records.add(it) }, "poll", true, { url ->
+            urls.add(url)
+            Connection(if (url.contains("all_field")) 401 else 200,
+                if (url.contains("all_field")) """{"message":"Wrong password"}""" else
+                    """{"results":[["${java.time.Instant.now().minusSeconds(60)}",{"field22":8040}]]}""")
+                .also { connections.add(it) }
+        })
+        val session = Session("user", "same-secret", emptyList())
+        repeat(2) {
+            try { api.rawAllFields(session, "KH-A"); fail("Expected settings rejection") }
+            catch (e: AquaWizApi.ApiException) { assertEquals(401, e.status) }
+        }
+        assertEquals(3, urls.size)
+        assertEquals(1, urls.count { it.contains("/graph?") })
+        connections.forEach { assertEquals("Bearer same-secret", it.getRequestProperty("Authorization")) }
+        val comparison = records.single { it.optString("type") == "auth-endpoint-comparison" }
+        assertEquals(401, comparison.getInt("settingsStatus"))
+        assertEquals(200, comparison.getInt("graphStatus"))
+        assertTrue(comparison.getBoolean("graphAccessible"))
+        assertEquals(1, comparison.getInt("parsedReadingCount"))
+        assertFalse(records.joinToString().contains("same-secret"))
+    }
+    @Test fun rejectedOrUnavailableGraphNeverMasksSettingsRejection() {
+        for (graphStatus in listOf(403, 0)) {
+            val records = mutableListOf<JSONObject>()
+            val api = AquaWizApi("https://example.invalid", { records.add(it) }, "settings", true, { url ->
+                if (url.contains("all_field")) Connection(401, "{}")
+                else if (graphStatus == 0) throw java.io.IOException("network failed")
+                else Connection(graphStatus, "{}")
+            })
+            try { api.rawAllFields(Session("u", "secret", emptyList()), "KH-A"); fail("Expected rejection") }
+            catch (e: AquaWizApi.ApiException) { assertEquals(401, e.status) }
+            val comparison = records.last()
+            assertEquals("auth-endpoint-comparison", comparison.getString("type"))
+            assertFalse(comparison.getBoolean("graphAccessible"))
+            if (graphStatus == 0) assertTrue(comparison.isNull("graphStatus"))
+            else assertEquals(403, comparison.getInt("graphStatus"))
+        }
+    }
+    @Test fun successfulOrNonAuthSettingsAndPublicBuildNeverProbe() {
+        for ((status, enabled) in listOf(200 to true, 500 to true, 401 to false)) {
+            val urls = mutableListOf<String>()
+            val api = AquaWizApi("https://example.invalid", null, "settings", enabled, { url ->
+                urls.add(url); Connection(status, """{"field8":8000}""")
+            })
+            runCatching { api.rawAllFields(Session("u", "secret", emptyList()), "KH-A") }
+            assertEquals(1, urls.size)
+        }
+    }
+
 }

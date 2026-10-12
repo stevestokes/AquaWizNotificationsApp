@@ -19,6 +19,8 @@ class AquaWizApi(
     private val diagnostics: Boolean = BuildConfig.VERSION_NAME.contains("diagnostic"),
     private val openConnection: (String) -> HttpURLConnection = { URI(it).toURL().openConnection() as HttpURLConnection },
 ) {
+    private var authenticationProbeAttempted = false
+
     data class TargetReadback(val summary: DeviceSummary?, val matches: Boolean, val error: Throwable? = null)
     companion object {
         const val GLOBAL_BASE = "https://server.aquawiz.net"
@@ -62,16 +64,42 @@ class AquaWizApi(
             .put("user", session.username)
             .put("token", JSONObject().put("access_token", session.accessToken))
             .toString()
-        val raw = request(
-            "POST",
-            "$baseUrl/api/v1/KH/$encodedSerial/all_field",
-            token = session.accessToken,
-            body = body,
-            serial = serial,
-        )
+        val raw = try {
+            request(
+                "POST",
+                "$baseUrl/api/v1/KH/$encodedSerial/all_field",
+                token = session.accessToken,
+                body = body,
+                serial = serial,
+            )
+        } catch (error: ApiException) {
+            if (error.status == 401 || error.status == 403) probeGraphAfterSettingsRejection(session, serial, error.status)
+            throw error
+        }
         diagnostic(JSONObject().put("type", "settings-parse").put("serial", serial)
             .put("identified", DeviceSummaryJson.parse(raw, serial) != null))
         return raw
+    }
+
+    /** One read-only comparison, never a login, write retry, or replacement for the original error. */
+    private fun probeGraphAfterSettingsRejection(session: Session, serial: String, settingsStatus: Int) {
+        if (!diagnostics) return
+        val shouldProbe = synchronized(this) {
+            if (authenticationProbeAttempted) false else { authenticationProbeAttempted = true; true }
+        }
+        if (!shouldProbe) return
+        val record = JSONObject().put("type", "auth-endpoint-comparison").put("serial", serial)
+            .put("settingsStatus", settingsStatus).put("graphWindowSeconds", 8 * 60 * 60)
+        try {
+            val raw = rawGraph(session, serial)
+            record.put("graphStatus", 200).put("graphAccessible", true)
+                .put("parsedReadingCount", MeasurementJson.graphMeasurements(raw, serial).size)
+        } catch (error: Exception) {
+            record.put("graphStatus", (error as? ApiException)?.status ?: JSONObject.NULL)
+                .put("graphAccessible", false).put("errorType", error.javaClass.simpleName)
+        } finally {
+            diagnostic(record)
+        }
     }
 
     /** Official app graph route recovered from AquaWiz APK. */
