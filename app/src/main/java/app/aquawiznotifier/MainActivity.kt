@@ -522,7 +522,7 @@ class MainActivity : Activity() {
         connectButton.isEnabled = false
         Thread {
             try {
-                val api = AquaWizApi(store.baseUrl(), store::captureIngestion, "connect")
+                val api = AquaWizApi(store.baseUrl(), store::captureIngestion, "connect", dosingAmountPerDkh = store::dosingAmountPerDkh)
                 val session = Session(
                     username = usernameValue,
                     accessToken = tokenValue,

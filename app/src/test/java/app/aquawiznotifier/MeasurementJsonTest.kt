@@ -36,7 +36,7 @@ class MeasurementJsonTest {
             exchange.responseBody.use { it.write(bytes) }
         }
         server.createContext("/api/v1/KH/KH-A/all_field") { e ->
-            respond(e, """{"latest_kh":8044,"latest_time":"2026-10-08T12:00:00Z","field8":8500,"access_token":"server-secret-token","passcode":"device-secret","old_passcode":"old-secret","pending_pw":"pending-secret","nested":{"token":{"access_token":"nested-secret"}}}""")
+            respond(e, """{"latest_kh":8044,"latest_time":"2026-10-08T12:00:00Z","field8":8500,"field5":"500000","access_token":"server-secret-token","passcode":"device-secret","old_passcode":"old-secret","pending_pw":"pending-secret","nested":{"token":{"access_token":"nested-secret"}}}""")
         }
         server.createContext("/api/v1/query/device/KH-A/graph") { e ->
             respond(e, """{"sample_size":1,"results":[[1791467192000,{"field22":8390,"field26":100}]]}""")
@@ -76,7 +76,7 @@ class MeasurementJsonTest {
         val raw = """{"sample_size":1,"device":"KH-A","results":[[1791467192000,
             {"field22":8390,"field23":0,"field24":12389,"field25":7278,
              "field26":100,"field27":8348,"field28":8339}]]}"""
-        val row = MeasurementJson.graphMeasurements(raw, "KH-A", Instant.parse("2026-10-08T16:00:00Z")).single()
+        val row = MeasurementJson.graphMeasurements(raw, "KH-A", Instant.parse("2026-10-08T16:00:00Z"), 500.0).single()
         assertEquals(Instant.parse("2026-10-08T13:46:32Z"), row.measuredAt)
         assertEquals(8.39, row.kh, 0.00001)
         assertEquals(8.348, row.ph!!, 0.00001)
@@ -225,7 +225,7 @@ class MeasurementJsonTest {
             }
         """.trimIndent()
 
-        val result = MeasurementJson.findLatest(raw, "KH1-00-05117", requirePreferredSerialWhenAmbiguous = false)
+        val result = MeasurementJson.graphMeasurements(raw, "KH1-00-05117", doseAmountPerDkh = 500.0).lastOrNull()
         assertNotNull(result)
         assertEquals(8.42, result!!.kh, 0.0001)
         assertEquals(8.27, result.ph!!, 0.0001)
@@ -261,7 +261,7 @@ class MeasurementJsonTest {
             }
         """.trimIndent()
 
-        val result = MeasurementJson.graphMeasurements(raw, "KH1-00-05117")
+        val result = MeasurementJson.graphMeasurements(raw, "KH1-00-05117", doseAmountPerDkh = 500.0)
         assertEquals(2, result.size)
         assertEquals(Instant.parse("2026-09-29T11:00:00Z"), result[0].measuredAt)
         assertEquals(10.05, result[0].kh, 0.0001)
@@ -274,7 +274,7 @@ class MeasurementJsonTest {
         val current = MeasurementJson.findLatest("""{"latest_kh":8420,"latest_ph1":8270,"latest_time":"2026-09-29T13:04:00Z"}""")!!
         assertEquals(8.42, current.kh, 0.00001)
         assertEquals(8.27, current.ph!!, 0.00001)
-        val rows = MeasurementJson.graphMeasurements("""{"results":[["2026-09-29T13:04:00Z",{"field22":8420,"field26":50}]]}""")
+        val rows = MeasurementJson.graphMeasurements("""{"results":[["2026-09-29T13:04:00Z",{"field22":8420,"field26":50}]]}""", doseAmountPerDkh = 500.0)
         assertEquals(25.0, rows.single().doseMl!!, 0.00001)
     }
     @Test fun currentAndGraphReadingsMergeWithoutLosingOptionalFields() {

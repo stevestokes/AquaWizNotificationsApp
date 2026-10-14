@@ -16,6 +16,9 @@ data class Measurement(
     val phOpenAir: Double? = null,
     val deltaPh: Double? = null,
     val doseMl: Double? = null,
+    val doseRawField26: Double? = null,
+    val doseAmountPerDkh: Double? = null,
+    val doseSchemaVersion: Int = 2,
 ) {
     val fingerprint: String get() = rawId ?: "${measuredAt.toEpochMilli()}:${"%.4f".format(kh)}"
 }

@@ -106,7 +106,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         val today = LocalDate.now()
         val todayReadings = all.filter { it.measuredAt.atZone(ZoneId.systemDefault()).toLocalDate() == today }.sortedBy { it.measuredAt }
         val todayValues = todayReadings.mapNotNull { it.doseMl?.takeIf { n -> n.isFinite() && n >= 0 } }
-        dailyDose.text = if (todayValues.isEmpty()) "—" else todayValues.sum().toLong().toString()
+        dailyDose.text = if (todayValues.isEmpty() || todayValues.size != todayReadings.size) "—" else todayValues.sum().toLong().toString()
         dosingSparkline.setMeasurements(todayReadings)
         val since = Instant.now().minusSeconds(selectedRange.seconds)
         val displayed = HistoryMerge.merge((all + (if (pointsDevice == serial) points else emptyList()))
@@ -263,7 +263,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         }
         thread(name = "AquaWizHeroSettings") {
             val result = runCatching {
-                val summary = DeviceSummaryJson.parse(AquaWizApi(baseUrl, store::captureIngestion, "hero-settings").rawAllFields(session, serial), serial)
+                val summary = DeviceSummaryJson.parse(AquaWizApi(baseUrl, store::captureIngestion, "hero-settings", dosingAmountPerDkh = store::dosingAmountPerDkh).rawAllFields(session, serial), serial)
                     ?: error("Controller settings unavailable")
                 if (current()) store.saveDeviceSummary(serial, summary)
             }
@@ -271,7 +271,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         }
         thread(name = "AquaWizHeroReadings") {
             val result = runCatching {
-                val fetched = AquaWizApi(baseUrl, store::captureIngestion, if (force) "refresh" else "home")
+                val fetched = AquaWizApi(baseUrl, store::captureIngestion, if (force) "refresh" else "home", dosingAmountPerDkh = store::dosingAmountPerDkh)
                     .graphMeasurements(session, serial, Instant.now().minusSeconds(AquaWizApi.RAW_GRAPH_WINDOW_SECONDS))
                 if (current()) store.saveMeasurements(serial, fetched)
                 fetched
@@ -304,7 +304,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
                 thread(name = "AquaWizCalibrationRead") {
                     val result = runCatching {
                         check(current() && !store.authPaused()) { "Connection changed. Reconnect in Config" }
-                        val summary = DeviceSummaryJson.parse(AquaWizApi(baseUrl, store::captureIngestion, "calibration-load").rawAllFields(session, serial), serial)
+                        val summary = DeviceSummaryJson.parse(AquaWizApi(baseUrl, store::captureIngestion, "calibration-load", dosingAmountPerDkh = store::dosingAmountPerDkh).rawAllFields(session, serial), serial)
                             ?: error("Unable to identify this controller's calibration setting")
                         val value = summary.trueTankKh ?: error("AquaWiz did not return the current calibration setting")
                         check(current()) { "Connection changed. Reopen calibration" }
@@ -319,7 +319,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
                 thread(name = "AquaWizCalibrationWrite") {
                     val result = runCatching {
                         check(current() && !store.authPaused()) { "Connection changed. Reconnect in Config" }
-                        AquaWizApi(baseUrl, store::captureIngestion, "calibration-save").setTrueTankKh(session, serial, value)
+                        AquaWizApi(baseUrl, store::captureIngestion, "calibration-save", dosingAmountPerDkh = store::dosingAmountPerDkh).setTrueTankKh(session, serial, value)
                         if (current()) {
                             store.deviceSummary(serial)?.let { store.saveDeviceSummary(serial, it.copy(trueTankKh = value.toDouble())) }
                             store.appendActivity("True tank KH calibration saved: " + value.stripTrailingZeros().toPlainString() + " dKH")
@@ -350,7 +350,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
             store.selectedDevice() == serial && store.baseUrl() == baseUrl
         fun read(): DeviceSummary {
             check(current() && !store.authPaused()) { "Connection changed. Reconnect in Config" }
-            val summary = DeviceSummaryJson.parse(AquaWizApi(baseUrl, store::captureIngestion, "settings-dialog-load").rawAllFields(session, serial), serial)
+            val summary = DeviceSummaryJson.parse(AquaWizApi(baseUrl, store::captureIngestion, "settings-dialog-load", dosingAmountPerDkh = store::dosingAmountPerDkh).rawAllFields(session, serial), serial)
                 ?: error("Unable to identify this controller's settings")
             check(current() && !store.authPaused()) { "Connection changed. Reopen settings" }
             return summary
@@ -373,7 +373,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
                 val result = runCatching {
                     // Read again before saving so packed dosing calibration digits are current.
                     val summary = read()
-                    val api = AquaWizApi(baseUrl, store::captureIngestion, "settings-dialog-save")
+                    val api = AquaWizApi(baseUrl, store::captureIngestion, "settings-dialog-save", dosingAmountPerDkh = store::dosingAmountPerDkh)
                     val updated = if (target != null) {
                         val receipt = api.setKhTargetAndReadBack(session, serial, target)
                         receipt.error?.let(::pauseIfExpired)

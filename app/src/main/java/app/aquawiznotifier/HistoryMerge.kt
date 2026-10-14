@@ -30,10 +30,12 @@ object HistoryMerge {
         fun value(a: Double?, b: Double?) = a?.takeIf { it.isFinite() } ?: b?.takeIf { it.isFinite() }
         val ph = value(preferred.ph, fallback.ph)
         val openAir = value(preferred.phOpenAir, fallback.phOpenAir)
+        val dose = listOf(first, second).maxBy { (if (it.doseSchemaVersion >= 2) 10 else 0) + (if (it.doseAmountPerDkh != null) 2 else 0) + (if (it.doseMl?.isFinite() == true) 1 else 0) }
         return preferred.copy(
             ph = ph, phOpenAir = openAir,
             deltaPh = value(preferred.deltaPh, fallback.deltaPh) ?: if (ph != null && openAir != null) ph - openAir else null,
-            doseMl = value(preferred.doseMl, fallback.doseMl),
+            doseMl = dose.doseMl,
+            doseRawField26 = dose.doseRawField26, doseAmountPerDkh = dose.doseAmountPerDkh, doseSchemaVersion = dose.doseSchemaVersion,
         )
     }
 }

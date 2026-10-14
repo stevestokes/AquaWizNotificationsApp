@@ -226,8 +226,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 30
-versionName = "0.8.19-diagnostic"
+versionCode = 31
+versionName = "0.8.20"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -373,6 +373,10 @@ The cause of the reported 08:00 averaged reading is still under investigation; t
 ## 0.8.17 Chart reveal fix
 
 - Fix the chart reveal restarting when changing date ranges. Range buttons filter retained individual readings without forcing another server fetch; overlapping reveal requests keep the current animation progressing. Settings-only updates no longer replay the lines.
+
+## 0.8.20 Controller-specific dosing conversion
+
+Graph dosing now converts raw field26 using the controller's configured mL per dKH instead of assuming 500 mL/dKH for every controller. The correction applies to Today's Dosing, chart, history and notifications. Raw demand and the conversion setting are retained with each reading so subsequent settings changes do not rescale recorded history. Previously saved graph doses are repaired from retained raw captures and their settings; unrecoverable historical doses display as unavailable. Missing settings never produce an assumed positive dose or a partial daily total. This public release includes the controller label settings fix; expanded diagnostic HTTP logging and the authentication probe run only in diagnostic prereleases. The session invalidation cause remains unresolved.
 
 ## 0.8.19-diagnostic Compare endpoint authentication
 

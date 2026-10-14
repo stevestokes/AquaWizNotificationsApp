@@ -14,7 +14,7 @@ class IngestionCaptureStoreTest {
             val store = IngestionCaptureStore(directory)
             store.record(fixture.getJSONObject(0)); store.record(fixture.getJSONObject(1))
             val serial = "KH-A"
-            val summaries = MeasurementJson.graphMeasurements(fixture.getJSONObject(1).getJSONObject("graph").toString(), serial)
+            val summaries = MeasurementJson.graphMeasurements(fixture.getJSONObject(1).getJSONObject("graph").toString(), serial, doseAmountPerDkh = 500.0)
             assertEquals(2, store.confirmedDailySummaryIdentities().size)
             // A genuine raw row at the very same 8 AM timestamp must survive, even with identical values.
             val raw = fixture.getJSONObject(0)

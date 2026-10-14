@@ -16,6 +16,7 @@ import javax.crypto.spec.GCMParameterSpec
 class SecureStore(context: Context) {
     private val captures = IngestionCaptureStore(java.io.File(context.filesDir, "measurement-support"),
         recentLimit = if (BuildConfig.VERSION_NAME.contains("diagnostic")) 256 else 64)
+    private val retainedDosingEvidence by lazy { captures.dosingEvidence() }
     private val confirmedDailySummaries by lazy { captures.confirmedDailySummaryIdentities() }
     fun captureIngestion(record: JSONObject) = captures.record(record)
     fun supportData(): String = JSONObject(captures.export(selectedDevice(), BuildConfig.VERSION_NAME))
@@ -152,6 +153,8 @@ class SecureStore(context: Context) {
             .put("field5", summary.dosingField5).put("field6", summary.dosingField6).put("field13", summary.measurementSchedule)
         prefs.edit().putString("summary_" + serial.uppercase(), json.toString()).apply()
     }
+    fun dosingAmountPerDkh(serial: String): Double? = DosingCalculation.amountPerDkh(serial, deviceSummary(serial)?.dosingField5)
+
     fun deviceSummary(serial: String): DeviceSummary? = prefs.getString("summary_" + serial.uppercase(), null)?.let { DeviceSummaryJson.parse(it, serial) }
 
     // Container size is a display preference, not an AquaWiz controller setting.
@@ -206,7 +209,15 @@ class SecureStore(context: Context) {
         synchronized(historyLock) {
         if (measurements.isEmpty()) return
 
-        val merged = HistoryMerge.merge(measurements.filter { MeasurementValidity.isNotFuture(it) }.map { serial to it } + measurementHistory())
+        val existing = measurementHistory()
+        val adjusted = measurements.filter { MeasurementValidity.isNotFuture(it) }.map { m ->
+            val previous = existing.firstOrNull { it.first.equals(serial, true) && HistoryMerge.sameReading(it.second, m) }?.second
+            // Preserve the conversion recorded for a reading when its raw demand is unchanged.
+            if (m.doseRawField26 != null && previous?.doseAmountPerDkh != null && m.doseRawField26 == previous.doseRawField26)
+                serial to m.copy(doseMl = previous.doseMl, doseAmountPerDkh = previous.doseAmountPerDkh)
+            else serial to resolveDosing(serial, m)
+        }
+        val merged = HistoryMerge.merge(adjusted + existing)
 
         val updated = JSONArray()
         merged.forEach { (deviceSerial, measurement) ->
@@ -237,7 +248,7 @@ class SecureStore(context: Context) {
         val removedSummaries = parsed.filter { (serial, m) -> summaryIdentity(serial, m) in confirmedDailySummaries }
         val merged = HistoryMerge.merge(parsed.filter { (serial, m) ->
             MeasurementValidity.isNotFuture(m) && summaryIdentity(serial, m) !in confirmedDailySummaries
-        })
+        }.map { (serial, m) -> serial to resolveDosing(serial, m) })
         // Repair already-saved duplicate/partial rows on the first read after upgrade.
         if (merged != parsed) {
             val updated = JSONArray()
@@ -260,12 +271,26 @@ class SecureStore(context: Context) {
         merged
     }
 
+    private fun resolveDosing(serial: String, m: Measurement): Measurement {
+        if (m.rawId?.startsWith("graph:") != true) return m
+        if (m.doseSchemaVersion >= 2 && m.doseAmountPerDkh != null) return m
+        val retained = retainedDosingEvidence[HistoryMerge.readingKey(serial, m)]
+        val raw = retained?.doseRawField26 ?: m.doseRawField26 ?: if (m.doseSchemaVersion < 2) m.doseMl?.times(2) else null
+        // Historical unknown settings are not replaced with today's setting. A fresh one-day
+        // response can restore them with its captured setting; otherwise retain raw demand only.
+        val amount = retained?.doseAmountPerDkh ?: if (m.doseSchemaVersion >= 2 && !m.measuredAt.isBefore(Instant.now().minusSeconds(86400)))
+            dosingAmountPerDkh(serial) else null
+        return m.copy(doseMl = DosingCalculation.millilitres(raw, amount), doseRawField26 = raw,
+            doseAmountPerDkh = amount, doseSchemaVersion = 2)
+    }
+
     fun lastStoredMeasurement(): Pair<String, Measurement>? {
         val history = measurementHistory()
         history.firstOrNull { it.first.equals(selectedDevice(), true) }?.let { return it }
         history.firstOrNull()?.let { return it }
         val raw = prefs.getString("last_measurement_json", null) ?: return null
         return runCatching { parseMeasurementJson(JSONObject(raw)) }.getOrNull()?.takeIf { MeasurementValidity.isNotFuture(it.second) }
+            ?.let { (serial, m) -> serial to resolveDosing(serial, m) }
     }
 
     private fun saveLatestMeasurement(serial: String, measurement: Measurement) {
@@ -282,6 +307,7 @@ class SecureStore(context: Context) {
         .put("phOpenAir", m.phOpenAir)
         .put("deltaPh", m.deltaPh)
         .put("doseMl", m.doseMl)
+        .put("doseRawField26", m.doseRawField26).put("doseAmountPerDkh", m.doseAmountPerDkh).put("doseSchemaVersion", m.doseSchemaVersion)
 
     private fun parseMeasurementJson(j: JSONObject?): Pair<String, Measurement>? {
         j ?: return null
@@ -298,6 +324,8 @@ class SecureStore(context: Context) {
             phOpenAir = optDoubleOrNull("phOpenAir"),
             deltaPh = optDoubleOrNull("deltaPh"),
             doseMl = optDoubleOrNull("doseMl"),
+            doseRawField26 = optDoubleOrNull("doseRawField26"), doseAmountPerDkh = optDoubleOrNull("doseAmountPerDkh"),
+            doseSchemaVersion = j.optInt("doseSchemaVersion", if (j.optString("rawId").startsWith("graph:")) 1 else 2),
         )
     }
 

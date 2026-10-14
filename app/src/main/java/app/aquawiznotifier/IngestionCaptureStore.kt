@@ -68,7 +68,8 @@ class IngestionCaptureStore(
                 val serial = record.getString("serial")
                 val since = Instant.parse(record.getString("graphSince"))
                 val at = Instant.parse(record.getString("capturedAt"))
-                val rows = MeasurementJson.graphMeasurements(graph.toString(), serial, at)
+                // Identity must use the old /2 representation to remove legacy daily summaries.
+                val rows = MeasurementJson.graphMeasurements(graph.toString(), serial, at, 500.0)
                 val daily = since.isBefore(at.minusSeconds(31L * 86400)) && rows.size >= 2 &&
                     rows.all { it.measuredAt.atZone(java.time.ZoneOffset.UTC).toLocalTime() == java.time.LocalTime.NOON } &&
                     rows.map { it.measuredAt.atZone(java.time.ZoneOffset.UTC).toLocalDate() }.distinct().size == rows.size
@@ -81,6 +82,40 @@ class IngestionCaptureStore(
         summaryRows.filter { (serial, m) -> HistoryMerge.readingKey(serial, m) !in rawTimes }
             .forEach { (serial, m) -> summaries.add(summaryIdentity(serial, m)) }
         summaries
+    }
+
+    /** Earliest retained raw capture supplies its contemporaneous controller dosing setting. */
+    fun dosingEvidence(): Map<String, Measurement> = synchronized(lock) {
+        val records = files().mapNotNull { runCatching { JSONObject(it.readText(Charsets.UTF_8)) }.getOrNull() }
+        data class Setting(val serial: String, val at: Instant, val amount: Double)
+        val settings = records.mapNotNull { record ->
+            val serial = record.optString("serial").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val body = record.optJSONObject("status") ?: if (record.optString("url").endsWith("/all_field") && record.optInt("status") == 200)
+                record.optJSONObject("responseBody") else null
+            val summary = body?.let { DeviceSummaryJson.parse(it.toString(), serial) } ?: return@mapNotNull null
+            val amount = DosingCalculation.amountPerDkh(serial, summary.dosingField5) ?: return@mapNotNull null
+            val at = runCatching { Instant.parse(record.getString("capturedAt")) }.getOrNull() ?: return@mapNotNull null
+            Setting(serial, at, amount)
+        }.sortedBy { it.at }
+        val evidence = linkedMapOf<String, Measurement>()
+        records.sortedBy { it.optString("capturedAt") }.forEach { record ->
+            val serial = record.optString("serial")
+            val at = runCatching { Instant.parse(record.getString("capturedAt")) }.getOrNull() ?: return@forEach
+            val since = runCatching { Instant.parse(record.getString("graphSince")) }.getOrNull()
+            // Long-window daily aggregates must not be used to repair individual readings.
+            if (since != null && since.isBefore(at.minusSeconds(86460))) return@forEach
+            val graph = record.optJSONObject("graph") ?: if (record.optString("url").contains("/graph?") && record.optInt("status") == 200)
+                record.optJSONObject("responseBody") else null
+            graph ?: return@forEach
+            val amount = settings.filter { it.serial.equals(serial, true) && !it.at.isAfter(at) && !it.at.isBefore(at.minusSeconds(86400)) }
+                .lastOrNull()?.amount ?: settings.firstOrNull { it.serial.equals(serial, true) && it.at.isAfter(at) && it.at.isBefore(at.plusSeconds(120)) }?.amount
+            MeasurementJson.graphMeasurements(graph.toString(), serial, at, amount).forEach { m ->
+                val key = HistoryMerge.readingKey(serial, m)
+                val old = evidence[key]
+                if (old == null || old.doseAmountPerDkh == null && m.doseAmountPerDkh != null) evidence[key] = m
+            }
+        }
+        evidence
     }
 
     private fun files(): List<File> = directory.listFiles()?.filter { it.name.endsWith(".json") }

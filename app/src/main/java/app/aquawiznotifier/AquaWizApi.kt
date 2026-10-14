@@ -18,7 +18,9 @@ class AquaWizApi(
     private val source: String = "unspecified",
     private val diagnostics: Boolean = BuildConfig.VERSION_NAME.contains("diagnostic"),
     private val openConnection: (String) -> HttpURLConnection = { URI(it).toURL().openConnection() as HttpURLConnection },
+    private val dosingAmountPerDkh: ((String) -> Double?)? = null,
 ) {
+    @Volatile private var observedDosingAmount: Double? = null
     private var authenticationProbeAttempted = false
 
     data class TargetReadback(val summary: DeviceSummary?, val matches: Boolean, val error: Throwable? = null)
@@ -76,6 +78,7 @@ class AquaWizApi(
             if (error.status == 401 || error.status == 403) probeGraphAfterSettingsRejection(session, serial, error.status)
             throw error
         }
+        observedDosingAmount = DosingCalculation.amountPerDkh(serial, DeviceSummaryJson.parse(raw, serial)?.dosingField5)
         diagnostic(JSONObject().put("type", "settings-parse").put("serial", serial)
             .put("identified", DeviceSummaryJson.parse(raw, serial) != null))
         return raw
@@ -121,14 +124,16 @@ class AquaWizApi(
 
     private fun parseAndCapture(raw: String, serial: String, since: Instant, statusRaw: String? = null): List<Measurement> {
         val now = Instant.now()
-        val rows = MeasurementJson.graphMeasurements(raw, serial, now)
+        val amount = observedDosingAmount ?: dosingAmountPerDkh?.invoke(serial)
+        val rows = MeasurementJson.graphMeasurements(raw, serial, now, amount)
         val sink = capture
         if (sink != null) runCatching {
             val accepted = JSONArray()
             rows.forEach { m -> accepted.put(JSONObject()
                 .put("measuredAt", m.measuredAt.toString()).put("rawId", m.rawId)
                 .put("kh", m.kh).put("ph", m.ph).put("phOpenAir", m.phOpenAir)
-                .put("deltaPh", m.deltaPh).put("doseMl", m.doseMl)) }
+                .put("deltaPh", m.deltaPh).put("doseMl", m.doseMl)
+                .put("doseRawField26", m.doseRawField26).put("doseAmountPerDkh", m.doseAmountPerDkh).put("doseSchemaVersion", 2)) }
             sink.invoke(JSONObject()
                 .put("capturedAt", now.toString()).put("source", source).put("serial", serial)
                 .put("server", baseUrl).put("graphSince", since.toString())
@@ -259,10 +264,10 @@ object MeasurementJson {
 
     private data class Candidate(val measurement: Measurement, val serial: String?)
 
-    fun graphMeasurements(raw: String, preferredSerial: String? = null, now: Instant = Instant.now()): List<Measurement> {
+    fun graphMeasurements(raw: String, preferredSerial: String? = null, now: Instant = Instant.now(), doseAmountPerDkh: Double? = null): List<Measurement> {
         val root = runCatching { JSONTokener(raw).nextValue() }.getOrNull() ?: return emptyList()
         val found = mutableListOf<Candidate>()
-        extractOfficialGraphRows(root, preferredSerial, found)
+        extractOfficialGraphRows(root, preferredSerial, found, doseAmountPerDkh)
         return found
             .map { it.measurement }
             .filter { MeasurementValidity.isNotFuture(it, now) }
@@ -311,7 +316,7 @@ object MeasurementJson {
      * For KH-series devices, field22 is the KH value and the official client transforms it by
      * dividing the raw value by 1000.
      */
-    private fun extractOfficialGraphRows(root: Any?, preferredSerial: String?, out: MutableList<Candidate>) {
+    private fun extractOfficialGraphRows(root: Any?, preferredSerial: String?, out: MutableList<Candidate>, doseAmountPerDkh: Double?) {
         val results = (root as? JSONObject)?.optJSONArray("results") ?: return
         for (i in 0 until results.length()) {
             val row = results.optJSONArray(i) ?: continue
@@ -323,7 +328,8 @@ object MeasurementJson {
             val ph = phFromField27(fields.opt("field27"))
             val phOpenAir = phFromField28(fields.opt("field28"))
             val deltaPh = if (ph != null && phOpenAir != null) ph - phOpenAir else null
-            val doseMl = doseFromField26(fields.opt("field26"))
+            val rawDose = asDouble(fields.opt("field26"))?.takeIf { it.isFinite() && it >= 0 }
+            val doseMl = DosingCalculation.millilitres(rawDose, doseAmountPerDkh)
             out += Candidate(
                 Measurement(
                     kh = kh,
@@ -333,6 +339,8 @@ object MeasurementJson {
                     phOpenAir = phOpenAir,
                     deltaPh = deltaPh,
                     doseMl = doseMl,
+                    doseRawField26 = rawDose,
+                    doseAmountPerDkh = doseAmountPerDkh,
                 ),
                 preferredSerial,
             )
@@ -358,13 +366,6 @@ object MeasurementJson {
         return scaled.takeIf { it in 4.0..12.0 }
     }
 
-    private fun doseFromField26(value: Any?): Double? {
-        val raw = asDouble(value) ?: return null
-        // Captured KH1 graph field26=100 matches the official CSV dose of 50 mL.
-        val scaled = raw / 2.0
-        return scaled.takeIf { it >= 0.0 }
-    }
-
     private fun walk(v: Any?, out: MutableList<Candidate>, inheritedSerial: String?, currentOnly: Boolean = false) {
         when (v) {
             is JSONArray -> for (i in 0 until v.length()) walk(v.opt(i), out, inheritedSerial, currentOnly)
@@ -388,7 +389,7 @@ object MeasurementJson {
         val deltaPh = number(o, listOf("deltaPh", "delta_ph", "delta"))
             ?: if (ph != null && phOpenAir != null) ph - phOpenAir else null
         val doseMl = number(o, listOf("doseMl", "dose_ml", "dailyDosingTotal", "dosingMl", "dosing_ml"))
-            ?: doseFromField26(o.opt("field26"))
+            ?: DosingCalculation.millilitres(asDouble(o.opt("field26")), null)
         return Measurement(
             kh = kh,
             measuredAt = whenAt,
