@@ -23,7 +23,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 32
-        versionName = "0.8.21-preview"
+        versionName = "0.8.21-preview" // Signed appearance preview
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
