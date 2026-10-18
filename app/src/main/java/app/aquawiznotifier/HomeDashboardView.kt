@@ -24,24 +24,24 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
     private val regular = resources.getFont(R.font.aw_regular)
     private val bold = resources.getFont(R.font.aw_extrabold)
     private val root = LinearLayout(context).apply {
-        orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(12), dp(16), dp(12)); setBackgroundColor(0xFFF2F2F2.toInt())
+        orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(12), dp(16), dp(12)); setBackgroundColor(AwUi.HOME_BACKGROUND)
     }
-    private val khTime = label("", 10f, Color.DKGRAY)
-    private val khValue = label("—", 40f, Color.BLACK, true)
+    private val khTime = label("", 10f, AwUi.SECONDARY)
+    private val khValue = label("—", 40f, AwUi.VALUE, true)
     private val phTitle = label("PH", 14f, Color.WHITE)
     private val phValue = label("—", 40f, Color.WHITE, true)
     private val phStatus = label("Unavailable", 12f, Color.WHITE)
-    private val khTarget = label("—", 22f, Color.BLACK, true)
-    private val remainingDose = label("—", 22f, Color.BLACK, true)
-    private val containerTotal = label("Set full volume", 10f, Color.GRAY).apply {
+    private val khTarget = label("—", 22f, AwUi.VALUE, true)
+    private val remainingDose = label("—", 22f, AwUi.VALUE, true)
+    private val containerTotal = label("Set full volume", 10f, AwUi.MUTED).apply {
         setSingleLine(true)
         setAutoSizeTextTypeUniformWithConfiguration(8, 10, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
     }
     private val dosingBeaker = DosingBeakerView(context).apply { setOnClickListener { editDosingContainer() } }
-    private val dailyDose = label("—", 22f, Color.BLACK, true)
+    private val dailyDose = label("—", 22f, AwUi.VALUE, true)
     private val dosingSparkline = DosingSparklineView(context)
-    private val syncStatus = label("", 12f, Color.GRAY)
-    private val selectedTime = label("", 12f, Color.GRAY)
+    private val syncStatus = label("", 12f, AwUi.MUTED)
+    private val selectedTime = label("", 12f, AwUi.MUTED)
     private val chart = HomeChartView(context)
     private val toggles = linkedMapOf<ChartSeries, CheckBox>()
     private val buttons = linkedMapOf<Range, Button>()
@@ -99,7 +99,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         phStatus.background = rounded(if (probe != null && probe in 100.0..999.0) 0xFF60C579.toInt() else 0x33333333, 6f)
         khTarget.text = summary?.khTarget?.let { "%.2f".format(it) } ?: "—"
         remainingDose.text = summary?.dosingRemainingMl?.let { it.toLong().toString() } ?: "—"
-        remainingDose.setTextColor(if (summary?.dosingRemainingMl != null && summary.dosingWarningMl != null && summary.dosingRemainingMl < summary.dosingWarningMl) 0xFFE76C00.toInt() else Color.BLACK)
+        remainingDose.setTextColor(if (summary?.dosingRemainingMl != null && summary.dosingWarningMl != null && summary.dosingRemainingMl < summary.dosingWarningMl) AwUi.WARNING else AwUi.VALUE)
         val fullVolume = store.dosingContainerMl(serial)
         containerTotal.text = fullVolume?.let { "of ${it.toLong()} mL" } ?: "Set full volume"
         dosingBeaker.setLevel(serial, summary?.dosingRemainingMl, fullVolume, summary?.dosingWarningMl)
@@ -124,8 +124,8 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         }
         val kh = ShimmerLayout(context).apply { readingPanels.add(this)
             orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(12), dp(12))
-            addView(label("KH", 14f, Color.DKGRAY).apply { gravity = Gravity.CENTER_VERTICAL }, fullHeight(26))
-            addView(valueWithUnit(khValue, "dKH", Color.BLACK), fullHeight(58))
+            addView(label("KH", 14f, AwUi.SECONDARY).apply { gravity = Gravity.CENTER_VERTICAL }, fullHeight(26))
+            addView(valueWithUnit(khValue, "dKH", AwUi.VALUE), fullHeight(58))
             khTime.gravity = Gravity.CENTER_VERTICAL; khTime.setSingleLine(true)
             khTime.setAutoSizeTextTypeUniformWithConfiguration(8, 10, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
             addView(khTime, fullHeight(26))
@@ -151,13 +151,14 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(10), dp(2), dp(6), dp(2))
             addView(AwUi.button(context, "Calibrate").apply {
-                textSize = 18f; background = rounded(Color.WHITE, 12f); setPadding(0, 0, 0, 0)
+                textSize = 18f; background = rounded(AwUi.SURFACE, 12f); setPadding(0, 0, 0, 0)
                 setAutoSizeTextTypeUniformWithConfiguration(12, 18, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
                 setSingleLine(true); setOnClickListener { openCalibration() }
             }, LinearLayout.LayoutParams(0, dp(44), 1f))
             addView(ImageButton(context).apply {
+                imageTintList = android.content.res.ColorStateList.valueOf(AwUi.INK)
                 setImageResource(R.drawable.ic_calibrate_kh); scaleType = ImageView.ScaleType.FIT_CENTER
-                setPadding(dp(5), dp(11), dp(5), dp(11)); background = rounded(0xFFF1F1F1.toInt(), 16f)
+                setPadding(dp(5), dp(11), dp(5), dp(11)); background = rounded(AwUi.ICON_SURFACE, 16f)
                 contentDescription = "Set true tank KH"; setOnClickListener { openCalibration() }
             }, LinearLayout.LayoutParams(dp(32), dp(44)))
         }, weighted(false))
@@ -416,7 +417,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         }
         val panel = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(8), dp(24), 0)
-            addView(label("Enter the volume when your dosing container is full. The beaker shows remaining mL as a percentage of this volume.", 14f, Color.DKGRAY), full())
+            addView(label("Enter the volume when your dosing container is full. The beaker shows remaining mL as a percentage of this volume.", 14f, AwUi.SECONDARY), full())
             addView(input, full())
         }
         val dialog = AlertDialog.Builder(context).setTitle("Full container volume")
@@ -439,11 +440,11 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         setPadding(dp(10), dp(4), dp(6), dp(4))
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            addView(label(title, 11f, Color.DKGRAY).apply {
+            addView(label(title, 11f, AwUi.SECONDARY).apply {
                 setSingleLine(true)
                 setAutoSizeTextTypeUniformWithConfiguration(9, 11, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
             }, fullHeight(16))
-            addView(valueWithUnit(value, unit, Color.BLACK), fullHeight(30))
+            addView(valueWithUnit(value, unit, AwUi.VALUE), fullHeight(30))
             if (title == "KH Dosing") addView(containerTotal, fullHeight(14))
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         if (title == "Today's Dosing") {
@@ -454,9 +455,10 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
             if (section == KhSettingsSection.DOSING) {
                 addView(dosingBeaker, LinearLayout.LayoutParams(dp(52), dp(66)).apply { leftMargin = dp(4) })
             } else addView(ImageButton(context).apply {
+                imageTintList = android.content.res.ColorStateList.valueOf(AwUi.INK)
                 setImageResource(if (section == KhSettingsSection.TARGET) R.drawable.ic_kh_target else R.drawable.ic_kh_dose)
                 scaleType = ImageView.ScaleType.FIT_CENTER
-                setPadding(dp(5), dp(11), dp(5), dp(11)); background = rounded(0xFFF1F1F1.toInt(), 16f)
+                setPadding(dp(5), dp(11), dp(5), dp(11)); background = rounded(AwUi.ICON_SURFACE, 16f)
                 contentDescription = "Edit $title settings"; setOnClickListener { openSettings(section) }
             }, LinearLayout.LayoutParams(dp(32), dp(44)))
         }
@@ -479,7 +481,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         override fun draw(canvas: Canvas) {
             val box = RectF(bounds)
             val round = Path().apply { addRoundRect(box, dp(24).toFloat(), dp(24).toFloat(), Path.Direction.CW) }
-            canvas.save(); canvas.clipPath(round); paint.shader = null; paint.color = Color.WHITE; canvas.drawRect(box, paint)
+            canvas.save(); canvas.clipPath(round); paint.shader = null; paint.color = AwUi.SURFACE; canvas.drawRect(box, paint)
             paint.shader = LinearGradient(box.width() * 0.45f, 0f, box.width(), box.height(), 0xFF2386F8.toInt(), 0xFF397CF0.toInt(), Shader.TileMode.CLAMP)
             val diagonal = Path().apply { moveTo(box.width() * 0.57f, 0f); lineTo(box.width(), 0f); lineTo(box.width(), box.height()); lineTo(box.width() * 0.43f, box.height()); close() }
             canvas.drawPath(diagonal, paint); canvas.restore()

@@ -18,13 +18,13 @@ open class BottomEditorDialog(context: Context) : Dialog(context) {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(20), dp(12), dp(20), dp(20))
         background = GradientDrawable().apply {
-            setColor(Color.WHITE)
+            setColor(AwUi.SURFACE)
             cornerRadii = floatArrayOf(dp(24).toFloat(), dp(24).toFloat(), dp(24).toFloat(), dp(24).toFloat(), 0f, 0f, 0f, 0f)
         }
     }
     init {
         requestWindowFeature(Window.FEATURE_NO_TITLE)
-        body.addView(View(context).apply { background = AwUi.surface(context, 0xFFCCD4DF.toInt(), 2, false) },
+        body.addView(View(context).apply { background = AwUi.surface(context, AwUi.BORDER, 2, false) },
             LinearLayout.LayoutParams(dp(36), dp(4)).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(18) })
         setContentView(ScrollView(context).apply { isFillViewport = false; addView(body) })
         setCanceledOnTouchOutside(true)

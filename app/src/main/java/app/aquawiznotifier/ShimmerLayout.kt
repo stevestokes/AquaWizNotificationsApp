@@ -53,12 +53,12 @@ open class ShimmerLayout(context: Context, private val shimmerRadius: Int = 0) :
         super.dispatchDraw(canvas)
         if (!isLoading) return
         val radius = shimmerRadius * resources.displayMetrics.density
-        paint.shader = null; paint.color = 0xFFEAF0F6.toInt()
+        paint.shader = null; paint.color = AwUi.SHIMMER
         canvas.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), radius, radius, paint)
         if (animator != null && width > 0) {
             val x = phase * width
             paint.shader = LinearGradient(x - width * .4f, 0f, x + width * .4f, height.toFloat(),
-                intArrayOf(0x00FFFFFF, 0xBFFFFFFF.toInt(), 0x00FFFFFF), floatArrayOf(0f, .5f, 1f), Shader.TileMode.CLAMP)
+                intArrayOf(0x00FFFFFF, if (AppAppearance.dark) 0x304E688A else 0xBFFFFFFF.toInt(), 0x00FFFFFF), floatArrayOf(0f, .5f, 1f), Shader.TileMode.CLAMP)
             canvas.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), radius, radius, paint)
             paint.shader = null
         }

@@ -35,12 +35,12 @@ class KhCalibrationDialog(context: Context, initialValue: Double?,
         body.addView(AwUi.label(context, "True Tank KH", 20f, true))
         body.addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            background = AwUi.surface(context, 0xFFF5F7FA.toInt(), 28)
+            background = AwUi.surface(context, AwUi.INPUT, 28)
             setPadding(dp(16), dp(8), dp(16), dp(8))
             addView(ImageView(context).apply { setImageResource(R.drawable.ic_calibrate_kh); imageTintList = android.content.res.ColorStateList.valueOf(AwUi.INK) },
                 LinearLayout.LayoutParams(dp(32), dp(32)))
             addView(input, LinearLayout.LayoutParams(0, dp(48), 1f))
-            addView(AwUi.label(context, "dKH", 18f).apply { setTextColor(Color.GRAY) },
+            addView(AwUi.label(context, "dKH", 18f).apply { setTextColor(AwUi.MUTED) },
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { leftMargin = dp(12) })
         }, full().apply { topMargin = dp(18) })
         body.addView(AwUi.label(context, "Enter 0 to disable calibration", 12f), full().apply { topMargin = dp(8) })
@@ -49,7 +49,7 @@ class KhCalibrationDialog(context: Context, initialValue: Double?,
         body.addView(calibrate, full().apply { height = dp(48); topMargin = dp(18) })
         body.addView(AwUi.label(context,
             "Use a fresh tank-water sample and a test kit you trust to measure its actual KH. Enter that value above and tap Calibrate.\n\nSelect [SYNC] on the KHA LCD to apply it immediately. AquaWiz says calibration finishes in about 30 minutes. Keeping the reference water close to the tank’s KH helps reduce the correction.", 13f).apply {
-                background = AwUi.surface(context, 0xFFF5F7FA.toInt(), 12)
+                background = AwUi.surface(context, AwUi.INPUT, 12)
                 setPadding(dp(12), dp(12), dp(12), dp(12)); setLineSpacing(dp(3).toFloat(), 1f)
             }, full().apply { topMargin = dp(16) })
         body.addView(cancel, full().apply { height = dp(44); topMargin = dp(12) })

@@ -55,7 +55,7 @@ class KhSettingsDialog(context: Context, private val section: KhSettingsSection,
         body.addView(retry, full().apply { topMargin = dp(8) })
         body.addView(apply, full().apply { height = dp(52); topMargin = dp(16) })
         body.addView(AwUi.label(context, "New settings take effect at the next measurement. Select [SYNC] on the KHA LCD to update immediately.", 13f).apply {
-            background = AwUi.surface(context, 0xFFF5F7FA.toInt(), 12)
+            background = AwUi.surface(context, AwUi.INPUT, 12)
             setPadding(dp(12), dp(12), dp(12), dp(12))
         }, full().apply { topMargin = dp(12) })
         body.addView(cancel, full().apply { height = dp(44); topMargin = dp(8) })
@@ -89,11 +89,11 @@ class KhSettingsDialog(context: Context, private val section: KhSettingsSection,
         inputs[key] = input
         body.addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            background = AwUi.surface(context, 0xFFF7F8FA.toInt(), 28)
+            background = AwUi.surface(context, AwUi.INPUT, 28)
             setPadding(dp(16), dp(8), dp(16), dp(8))
             addView(ImageView(context).apply { setImageResource(icon) }, LinearLayout.LayoutParams(dp(26), dp(26)))
             addView(input, LinearLayout.LayoutParams(0, dp(42), 1f))
-            addView(AwUi.label(context, unit, 16f).apply { setTextColor(android.graphics.Color.GRAY) },
+            addView(AwUi.label(context, unit, 16f).apply { setTextColor(AwUi.MUTED) },
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { leftMargin = dp(12) })
         }, full().apply { topMargin = dp(8) })
         hint?.let { body.addView(AwUi.label(context, it, 12f).apply { setLineSpacing(dp(2).toFloat(), 1f) }, full().apply { topMargin = dp(7) }) }
@@ -107,7 +107,7 @@ class KhSettingsDialog(context: Context, private val section: KhSettingsSection,
         parent.addView(AwUi.label(context, title, 13f), full().apply { topMargin = dp(16) })
         val button = AwUi.button(context, "—").apply {
             tag = "settings_$key"; contentDescription = title
-            background = AwUi.surface(context, 0xFFF7F8FA.toInt(), 28)
+            background = AwUi.surface(context, AwUi.INPUT, 28)
             setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_kh_clock, 0, 0, 0)
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
             setOnClickListener {

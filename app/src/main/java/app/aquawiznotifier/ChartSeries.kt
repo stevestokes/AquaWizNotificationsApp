@@ -1,11 +1,19 @@
 package app.aquawiznotifier
 
-enum class ChartSeries(val label: String, val color: Int, val defaultVisible: Boolean) {
+enum class ChartSeries(val label: String, private val lightColor: Int, val defaultVisible: Boolean) {
     KH("KH", 0xFF5B34FF.toInt(), true),
     PH("pH", 0xFF3BBF5B.toInt(), true),
     PH_OPEN_AIR("pH(O)", 0xFF287DF0.toInt(), true),
     DELTA("ΔpH", 0xFFF07818.toInt(), false),
     DOSE("Dose (mL)", 0xFFE5BD00.toInt(), false);
+
+    val color: Int get() = if (!AppAppearance.dark) lightColor else when (this) {
+        KH -> 0xFFA58CFF.toInt()
+        PH -> 0xFF67DC86.toInt()
+        PH_OPEN_AIR -> 0xFF70B0FF.toInt()
+        DELTA -> 0xFFFFAA5B.toInt()
+        DOSE -> 0xFFFFD84D.toInt()
+    }
 
     fun value(m: Measurement): Double? = when (this) {
         KH -> m.kh

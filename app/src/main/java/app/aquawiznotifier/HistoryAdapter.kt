@@ -35,7 +35,7 @@ class HistoryAdapter(private val context: Context, private val store: SecureStor
         val values = listOf("%.2f".format(m.kh), format(m.ph), format(m.phOpenAir),
             m.deltaPh?.let { "%+.2f".format(it) } ?: "—", format(m.doseMl))
         holder.values.zip(values).forEach { (view, value) -> view.text = value }
-        row.setBackgroundColor(if (position % 2 == 0) Color.WHITE else 0xFFEEF4FB.toInt())
+        row.setBackgroundColor(if (position % 2 == 0) AwUi.SURFACE else AwUi.ALTERNATE_ROW)
         row.contentDescription = holder.date.text.toString() + ", KH " + values[0] +
             " dKH, pH " + values[1] + ", pH open air " + values[2] + ", delta pH " + values[3] + ", dose " + values[4] + " mL" +
             if (note.isBlank()) ". Tap to add a note" else ". Note: $note. Tap to edit note"
@@ -61,14 +61,14 @@ class HistoryAdapter(private val context: Context, private val store: SecureStor
                 values += value
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.VERTICAL; setPadding(0, dp(9), dp(4), 0)
-                    addView(AwUi.label(context, title, 10f).apply { setTextColor(0xFF65758B.toInt()) })
+                    addView(AwUi.label(context, title, 10f).apply { setTextColor(AwUi.MUTED) })
                     addView(value, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(25)))
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             }
         })
         val note = AwUi.label(context, "", 13f).apply {
             tag = "measurement_note"
-            setTextColor(0xFF58677B.toInt())
+            setTextColor(AwUi.MUTED)
             visibility = View.GONE
         }
         addView(note, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(9) })

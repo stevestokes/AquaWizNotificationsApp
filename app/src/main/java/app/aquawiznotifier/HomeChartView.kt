@@ -34,10 +34,10 @@ class HomeChartView(context: Context) : View(context) {
         if (visible) revealLines() else { revealAnimator?.cancel(); reveal = 1f }
     }
     override fun onDetachedFromWindow() { revealAnimator?.cancel(); super.onDetachedFromWindow() }
-    private val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.GRAY; textSize = sp(11f) }
-    private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFE7E7E7.toInt(); strokeWidth = dp(1f) }
-    private val markerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.GRAY; strokeWidth = dp(1f) }
-    private val targetPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.RED; strokeWidth = dp(1f) }
+    private val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = AwUi.MUTED; textSize = sp(11f) }
+    private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = AwUi.GRID; strokeWidth = dp(1f) }
+    private val markerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = AwUi.MUTED; strokeWidth = dp(1f) }
+    private val targetPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = if (AppAppearance.dark) 0xFFFF6B6B.toInt() else Color.RED; strokeWidth = dp(1f) }
     private val bandPaint = Paint().apply { color = 0x0E5B34FF }
     private val limitPaint = Paint().apply { color = 0x775B34FF; strokeWidth = dp(1f); pathEffect = DashPathEffect(floatArrayOf(dp(4f), dp(4f)), 0f) }
     private var items = emptyList<Measurement>()
@@ -120,7 +120,7 @@ class HomeChartView(context: Context) : View(context) {
             canvas.drawLine(left, y(low), right, y(low), limitPaint)
             canvas.drawLine(left, y(high), right, y(high), limitPaint)
         } }
-        axisPaint.color = Color.GRAY
+        axisPaint.color = AwUi.MUTED
         canvas.drawText("dKH / pH", left, top - dp(10f), axisPaint)
         for (i in 0..5) {
             val value = primary.first + (primary.second - primary.first) * i / 5
@@ -142,7 +142,7 @@ class HomeChartView(context: Context) : View(context) {
             canvas.drawLine(right, yy, right + dp(3f), yy, markerPaint)
             canvas.drawText(("%." + decimals + "f").format(java.util.Locale.US, value), right + dp(6f), yy + dp(4f), axisPaint)
         }
-        axisPaint.color = Color.GRAY
+        axisPaint.color = AwUi.MUTED
         if (items.isEmpty() || visible.isEmpty()) {
             val message = if (items.isEmpty()) "No measurements in this range" else "Select a line above to display it"
             canvas.drawText(message, left, (top + bottom) / 2, axisPaint)

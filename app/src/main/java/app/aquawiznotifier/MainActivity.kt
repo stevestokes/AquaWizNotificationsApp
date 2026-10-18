@@ -63,6 +63,7 @@ class MainActivity : Activity() {
     private val uiHandler = Handler(Looper.getMainLooper())
     private val refreshRunnable = object : Runnable {
         override fun run() {
+            if (checkAppearance()) return
             if (::status.isInitialized) updateStatus()
             if (::historyList.isInitialized && currentSection == "history") updateHistory()
             if (::homeSection.isInitialized && currentSection == "home") homeSection.refreshFromLocal()
@@ -71,6 +72,7 @@ class MainActivity : Activity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        AppAppearance.apply(this)
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false)
         SystemNavigation.configure(window)
@@ -92,11 +94,21 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (checkAppearance()) return
         if (::status.isInitialized) updateStatus()
         if (::historyList.isInitialized) updateHistory()
         if (::homeSection.isInitialized) homeSection.refreshFromLocal()
         uiHandler.removeCallbacks(refreshRunnable)
         uiHandler.postDelayed(refreshRunnable, 3000L)
+    }
+
+    private var appearanceRecreating = false
+    private fun checkAppearance(): Boolean {
+        if (AppAppearance.usesDark(AppAppearance.mode(this), resources.configuration.uiMode) != AppAppearance.dark) {
+            if (!appearanceRecreating) { appearanceRecreating = true; recreate() }
+            return true
+        }
+        return false
     }
 
     override fun onPause() {
@@ -170,7 +182,7 @@ class MainActivity : Activity() {
         bottomNavigation = BottomNavigationView(this, store.showStatusTab()) { showSection(it) }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xFFF2F2F2.toInt())
+            setBackgroundColor(AwUi.HOME_BACKGROUND)
             setOnApplyWindowInsetsListener { view, insets ->
                 val bars = if (Build.VERSION.SDK_INT >= 30) {
                     insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
@@ -288,9 +300,9 @@ class MainActivity : Activity() {
     }
 
     private fun buildHistorySection(): View {
-        val root = verticalRoot().apply { setBackgroundColor(0xFFF2F4F7.toInt()) }
+        val root = verticalRoot().apply { setBackgroundColor(AwUi.BACKGROUND) }
         root.addView(AwUi.label(this, "History", 24f, true), full())
-        historySummary = AwUi.label(this, "", 12f).apply { setTextColor(0xFF65758B.toInt()) }
+        historySummary = AwUi.label(this, "", 12f).apply { setTextColor(AwUi.MUTED) }
         root.addView(historySummary, full().apply { bottomMargin = dp(12) })
         historyAdapter = HistoryAdapter(this, store)
         historyList = ListView(this).apply {
@@ -341,13 +353,13 @@ class MainActivity : Activity() {
 
     private fun buildConfigSection(): View {
         val scroll = ScrollView(this)
-        val root = verticalRoot().apply { setBackgroundColor(0xFFF2F4F7.toInt()) }
+        val root = verticalRoot().apply { setBackgroundColor(AwUi.BACKGROUND) }
         scroll.addView(root)
         root.addView(AwUi.label(this, "Config", 24f, true), full().apply { bottomMargin = dp(12) })
 
         val account = sectionCard("AquaWiz connection")
         connectionState = AwUi.label(this, "", 16f, true)
-        connectionDetails = AwUi.label(this, "", 12f).apply { setTextColor(0xFF65758B.toInt()); setLineSpacing(dp(4).toFloat(), 1f) }
+        connectionDetails = AwUi.label(this, "", 12f).apply { setTextColor(AwUi.MUTED); setLineSpacing(dp(4).toFloat(), 1f) }
         account.addView(connectionState, full())
         account.addView(connectionDetails, full())
         connectButton = AwUi.button(this, "Open AquaWiz Web Login", true).apply { setOnClickListener { signIn() } }
@@ -380,6 +392,25 @@ class MainActivity : Activity() {
         account.addView(settings, full())
         root.addView(account, full().apply { bottomMargin = dp(12) })
 
+        val appearance = sectionCard("Appearance")
+        appearance.addView(AwUi.label(this, "Choose a fixed theme or follow your phone's dark mode setting.", 12f), full())
+        val appearanceModes = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
+        val selectedMode = AppAppearance.mode(this)
+        AppearanceMode.values().forEach { mode ->
+            appearanceModes.addView(RadioButton(this).apply {
+                id = View.generateViewId(); tag = "appearance_" + mode.name
+                text = mode.title; textSize = 14f; setTextColor(AwUi.INK)
+                buttonTintList = android.content.res.ColorStateList.valueOf(AwUi.BLUE)
+                isChecked = mode == selectedMode
+                setOnClickListener {
+                    AppAppearance.setMode(this@MainActivity, mode)
+                    checkAppearance()
+                }
+            }, full())
+        }
+        appearance.addView(appearanceModes, full())
+        root.addView(appearance, full().apply { bottomMargin = dp(12) })
+
         val notifications = sectionCard("Notification details")
         notifications.addView(AwUi.label(this, "KH and pH are always included. Choose additional values.", 12f), full())
         phOpenAirCheck = notificationToggle("pH(O) · fully aerated pH") { store.setShowPhOpenAir(it) }
@@ -408,7 +439,7 @@ class MainActivity : Activity() {
             setOnClickListener { exportSupportData() }
         }, full())
         actions.addView(AwUi.button(this, "Stop & disconnect").apply {
-            setTextColor(0xFFB64242.toInt())
+            setTextColor(AwUi.DANGER)
             setOnClickListener {
                 store.appendActivity("Monitoring stopped and notifier session cleared")
                 PollScheduler.cancel(this@MainActivity); store.clearSession(); store.clearMonitoringState()
@@ -440,7 +471,7 @@ class MainActivity : Activity() {
         if (!::connectionState.isInitialized) return
         val session = store.session()
         connectionState.text = when { store.authPaused() -> "Session expired · reconnect"; session == null -> "Not connected"; else -> "Connected" }
-        connectionState.setTextColor(if (session != null && !store.authPaused()) 0xFF26985A.toInt() else AwUi.INK)
+        connectionState.setTextColor(if (session != null && !store.authPaused()) AwUi.SUCCESS else AwUi.INK)
         connectionDetails.text = listOfNotNull(session?.username, store.selectedDevice(),
             if (store.baseUrl().contains(".cn")) "China server" else "Global server").joinToString(" · ")
     }
@@ -452,12 +483,14 @@ class MainActivity : Activity() {
 
     private fun textView(label: String, size: Float = 16f) = TextView(this).apply {
         text = label
+        setTextColor(AwUi.INK); setLinkTextColor(if (AppAppearance.dark) 0xFF70B0FF.toInt() else AwUi.BLUE)
         textSize = size
         setPadding(0, dp(5), 0, dp(5))
     }
 
     private fun field(hintText: String): EditText = EditText(this).apply {
         hint = hintText
+        setTextColor(AwUi.INK); setHintTextColor(AwUi.MUTED)
         setSingleLine(true)
         setPadding(dp(12), dp(10), dp(12), dp(10))
     }

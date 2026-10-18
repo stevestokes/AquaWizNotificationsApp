@@ -24,7 +24,7 @@ class MeasurementNoteDialog(context: Context, serial: String, measurement: Measu
             minLines = 3; maxLines = 6
             textSize = 16f; typeface = context.resources.getFont(R.font.aw_regular)
             setTextColor(AwUi.INK); setPadding(dp(12), dp(12), dp(12), dp(12))
-            background = AwUi.surface(context, 0xFFF5F7FA.toInt(), 12)
+            background = AwUi.surface(context, AwUi.INPUT, 12)
             setText(store.measurementNote(serial, measurement))
             setSelection(text.length)
         }

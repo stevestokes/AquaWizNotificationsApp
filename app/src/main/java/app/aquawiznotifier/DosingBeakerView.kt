@@ -34,11 +34,11 @@ class DosingBeakerView(context: Context) : View(context) {
     private var fillAnimator: ValueAnimator? = null
     private var waveAnimator: ValueAnimator? = null
     private val blue = 0xFF0089FF.toInt()
-    private val orange = 0xFFE76C00.toInt()
+    private val orange get() = AwUi.WARNING
 
     init {
         isClickable = true; isFocusable = true
-        background = AwUi.surface(context, 0xFFF1F6FB.toInt(), 12, false)
+        background = AwUi.surface(context, AwUi.INPUT, 12, false)
     }
 
     fun setLevel(serial: String, remainingMl: Double?, containerMl: Double?, warningMl: Double?) {
@@ -101,7 +101,7 @@ class DosingBeakerView(context: Context) : View(context) {
         val box = RectF(width * .23f, height * .12f, width * .77f, height * .70f)
         vessel.reset()
         vessel.addRoundRect(box, 3 * d, 3 * d, Path.Direction.CW)
-        paint.style = Paint.Style.FILL; paint.color = Color.WHITE
+        paint.style = Paint.Style.FILL; paint.color = AwUi.SURFACE
         canvas.drawPath(vessel, paint)
         val saved = canvas.save(); canvas.clipPath(vessel)
         if (fraction != null && displayedFill > 0f) {
@@ -118,7 +118,7 @@ class DosingBeakerView(context: Context) : View(context) {
         }
         canvas.restoreToCount(saved)
         paint.style = Paint.Style.STROKE; paint.strokeWidth = 1.6f * d
-        paint.color = if (low) orange else 0xFF697584.toInt()
+        paint.color = if (low) orange else AwUi.MUTED
         // Open top, pouring lip, and small graduation marks.
         outline.reset()
         outline.apply {
@@ -137,7 +137,7 @@ class DosingBeakerView(context: Context) : View(context) {
         paint.style = Paint.Style.FILL; paint.textAlign = Paint.Align.CENTER
         paint.textSize = 10 * resources.displayMetrics.scaledDensity
         paint.typeface = typeface
-        paint.color = if (low) orange else 0xFF40536B.toInt()
+        paint.color = if (low) orange else AwUi.INK
         canvas.drawText(fraction?.let { "${(it * 100).roundToInt()}%" } ?: "Set size", width / 2f, height * .90f, paint)
     }
 }

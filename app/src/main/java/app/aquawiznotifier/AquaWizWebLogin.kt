@@ -25,13 +25,14 @@ class AquaWizWebLogin(
         val dialog = Dialog(activity)
         val root = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
+            setBackgroundColor(AwUi.SURFACE)
             setPadding(dp(12), dp(12), dp(12), dp(12))
         }
 
         root.addView(TextView(activity).apply {
             text = "AquaWiz Web Login"
             textSize = 20f
-            setTextColor(Color.BLACK)
+            setTextColor(AwUi.INK)
         })
         root.addView(TextView(activity).apply {
             text = "Sign in on the official AquaWiz page below. AquaWiz Notifier captures only the returned access token; it does not save your web password."

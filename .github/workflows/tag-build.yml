@@ -86,7 +86,7 @@ jobs:
             gh release upload "$RELEASE_TAG" "$STABLE" "$VERSIONED" --clobber
           else
             EXTRA_FLAGS=()
-            if [[ "$RELEASE_TAG" == *diagnostic* ]]; then
+            if [[ "$RELEASE_TAG" == *diagnostic* || "$RELEASE_TAG" == *preview* ]]; then
               EXTRA_FLAGS+=(--prerelease --latest=false)
             fi
             gh release create "$RELEASE_TAG" "$STABLE" "$VERSIONED" "${EXTRA_FLAGS[@]}" \

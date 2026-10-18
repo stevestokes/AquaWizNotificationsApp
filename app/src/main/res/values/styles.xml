@@ -1,11 +1,25 @@
 <resources>
     <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
+        <item name="android:forceDarkAllowed">false</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:navigationBarColor">#000000</item>
         <item name="android:windowLightNavigationBar">false</item>
         <item name="android:statusBarColor">#FFFFFF</item>
         <item name="android:colorAccent">#0B5D72</item>
+    </style>
+    <style name="AppThemeDark" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowBackground">#101824</item>
+        <item name="android:colorBackground">#101824</item>
+        <item name="android:statusBarColor">#101824</item>
+        <item name="android:navigationBarColor">#000000</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:textColorPrimary">#E6EDF7</item>
+        <item name="android:textColorSecondary">#ACBCD0</item>
+        <item name="android:colorAccent">#6CB2FF</item>
     </style>
     <style name="NoteSheetAnimation">
         <item name="android:windowEnterAnimation">@anim/note_sheet_enter</item>

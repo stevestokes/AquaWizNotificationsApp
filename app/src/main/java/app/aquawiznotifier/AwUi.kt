@@ -9,11 +9,25 @@ import android.widget.Button
 import android.widget.TextView
 
 object AwUi {
-    val BORDER = 0xFFCBD3DE.toInt()
-    val INK = 0xFF253348.toInt()
+    val BORDER get() = if (AppAppearance.dark) 0xFF405069.toInt() else 0xFFCBD3DE.toInt()
+    val INK get() = if (AppAppearance.dark) 0xFFE6EDF7.toInt() else 0xFF253348.toInt()
+    val SURFACE get() = if (AppAppearance.dark) 0xFF1B2636.toInt() else Color.WHITE
+    val BACKGROUND get() = if (AppAppearance.dark) 0xFF101824.toInt() else 0xFFF2F4F7.toInt()
+    val HOME_BACKGROUND get() = if (AppAppearance.dark) BACKGROUND else 0xFFF2F2F2.toInt()
+    val VALUE get() = if (AppAppearance.dark) INK else Color.BLACK
+    val MUTED get() = if (AppAppearance.dark) 0xFFACBCD0.toInt() else 0xFF65758B.toInt()
+    val SECONDARY get() = if (AppAppearance.dark) MUTED else Color.DKGRAY
+    val INPUT get() = if (AppAppearance.dark) 0xFF253246.toInt() else 0xFFF5F7FA.toInt()
+    val ICON_SURFACE get() = if (AppAppearance.dark) INPUT else 0xFFF1F1F1.toInt()
+    val ALTERNATE_ROW get() = if (AppAppearance.dark) 0xFF243249.toInt() else 0xFFEEF4FB.toInt()
+    val GRID get() = if (AppAppearance.dark) 0xFF38475C.toInt() else 0xFFE7E7E7.toInt()
+    val SHIMMER get() = if (AppAppearance.dark) 0xFF28384E.toInt() else 0xFFEAF0F6.toInt()
+    val WARNING get() = if (AppAppearance.dark) 0xFFFFAB59.toInt() else 0xFFE76C00.toInt()
+    val DANGER get() = if (AppAppearance.dark) 0xFFFF9898.toInt() else 0xFFB64242.toInt()
+    val SUCCESS get() = if (AppAppearance.dark) 0xFF7DE3A4.toInt() else 0xFF26985A.toInt()
     val BLUE = 0xFF287DF0.toInt()
     fun dp(context: Context, value: Int) = (value * context.resources.displayMetrics.density).toInt()
-    fun surface(context: Context, color: Int = Color.WHITE, radius: Int = 20, border: Boolean = true): android.graphics.drawable.Drawable =
+    fun surface(context: Context, color: Int = SURFACE, radius: Int = 20, border: Boolean = true): android.graphics.drawable.Drawable =
         RoundedSurface(color, dp(context, radius).toFloat(), if (border) dp(context, 2).toFloat() else 0f)
     fun drawBorder(canvas: android.graphics.Canvas, rect: android.graphics.RectF, radius: Float, width: Float) {
         // Fill the ring between parallel contours, with no shadow or stroke overlap at corners.
@@ -40,7 +54,7 @@ object AwUi {
     fun styleButton(button: Button, primary: Boolean) {
         button.setTextColor(if (primary) Color.WHITE else INK)
         button.background = RippleDrawable(ColorStateList.valueOf(0x22287DF0),
-            surface(button.context, if (primary) BLUE else Color.WHITE, 12, !primary), null)
+            surface(button.context, if (primary) BLUE else SURFACE, 12, !primary), null)
     }
 }
 

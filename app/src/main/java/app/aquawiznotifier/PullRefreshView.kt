@@ -9,6 +9,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 class PullRefreshView(context: Context, canScrollUp: () -> Boolean, refresh: () -> Unit) : SwipeRefreshLayout(context) {
     init {
         setColorSchemeColors(AwUi.BLUE)
+        setProgressBackgroundColorSchemeColor(AwUi.SURFACE)
         setOnChildScrollUpCallback { _, _ -> canScrollUp() }
         setOnRefreshListener { refresh() }
         accessibilityDelegate = object : View.AccessibilityDelegate() {

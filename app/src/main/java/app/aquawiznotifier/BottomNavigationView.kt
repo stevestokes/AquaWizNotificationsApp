@@ -25,7 +25,7 @@ class BottomNavigationView(context: Context, showStatus: Boolean, private val on
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
         setPadding(dp(8), dp(2), dp(8), dp(2))
-        background = AwUi.surface(context, Color.WHITE, radius = 36, border = false)
+        background = AwUi.surface(context, AwUi.SURFACE, radius = 36, border = false)
         accessibilityDelegate = object : View.AccessibilityDelegate() {
             override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfo) {
                 super.onInitializeAccessibilityNodeInfo(host, info)
@@ -99,7 +99,7 @@ class BottomNavigationView(context: Context, showStatus: Boolean, private val on
         items.values.forEach { item ->
             val active = item.section == section
             item.view.isSelected = active
-            val ink = if (active) Color.WHITE else 0xFF697584.toInt()
+            val ink = if (active) Color.WHITE else AwUi.MUTED
             item.icon.imageTintList = ColorStateList.valueOf(ink)
             item.label.setTextColor(ink)
             item.view.background = RippleDrawable(
@@ -108,7 +108,7 @@ class BottomNavigationView(context: Context, showStatus: Boolean, private val on
                     cornerRadius = dp(16).toFloat()
                     setColor(if (active) 0xFF0089FF.toInt() else Color.TRANSPARENT)
                 },
-                GradientDrawable().apply { cornerRadius = dp(16).toFloat(); setColor(Color.WHITE) }
+                GradientDrawable().apply { cornerRadius = dp(16).toFloat(); setColor(AwUi.SURFACE) }
             )
         }
     }

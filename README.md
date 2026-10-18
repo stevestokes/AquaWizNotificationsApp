@@ -226,8 +226,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 31
-versionName = "0.8.20"
+versionCode = 32
+versionName = "0.8.21-preview"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -373,6 +373,10 @@ The cause of the reported 08:00 averaged reading is still under investigation; t
 ## 0.8.17 Chart reveal fix
 
 - Fix the chart reveal restarting when changing date ranges. Range buttons filter retained individual readings without forcing another server fetch; overlapping reveal requests keep the current animation progressing. Settings-only updates no longer replay the lines.
+
+## 0.8.21-preview Dark mode
+
+Config → Appearance offers Light (dark mode off), Dark (always on), and Follow Android system. Follow Android system uses Android's current night-mode configuration, including a schedule configured in Android settings. It never checks the clock or uses a separate app schedule. The choice is saved and applied immediately, on reopening the app, and when the system theme changes. Existing installations default to Light. Dashboard, chart, history, Config, editing sheets, loading indicators, and system status-bar icons use coordinated light/dark colors. This signed preview does not replace the latest public release.
 
 ## 0.8.20 Controller-specific dosing conversion
 
