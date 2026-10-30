@@ -309,11 +309,11 @@ class MainActivity : Activity() {
             adapter = historyAdapter; dividerHeight = 0; selector = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
             background = AwUi.surface(this@MainActivity, radius = 14, border = false); clipToOutline = true
             setOnItemClickListener { _, _, position, _ ->
-                val (serial, measurement) = historyAdapter.getItem(position)
+                val (serial, measurement) = historyAdapter.measurementAt(position) ?: return@setOnItemClickListener
                 MeasurementNoteDialog(this@MainActivity, serial, measurement, store, ::updateHistory).show()
             }
         }
-        val empty = AwUi.label(this, "No measurements stored yet.", 15f).apply { setPadding(0, dp(24), 0, 0) }
+        val empty = AwUi.label(this, "No measurements or calibrations stored yet.", 15f).apply { setPadding(0, dp(24), 0, 0) }
         root.addView(empty)
         historyList.emptyView = empty
         historyShimmer = ShimmerLayout(this, 16).apply { orientation = LinearLayout.VERTICAL }
@@ -704,7 +704,7 @@ class MainActivity : Activity() {
         if (::historyAdapter.isInitialized) {
             val readings = store.measurementHistory()
             historyAdapter.submit(readings)
-            historySummary.text = readings.size.toString() + " readings · Newest first"
+            historySummary.text = readings.size.toString() + " readings · " + store.calibrationEvents().size + " calibrations · Newest first"
         }
     }
 

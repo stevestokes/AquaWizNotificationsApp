@@ -23,6 +23,7 @@ object AwUi {
     val GRID get() = if (AppAppearance.dark) 0xFF38475C.toInt() else 0xFFE7E7E7.toInt()
     val SHIMMER get() = if (AppAppearance.dark) 0xFF28384E.toInt() else 0xFFEAF0F6.toInt()
     val WARNING get() = if (AppAppearance.dark) 0xFFFFAB59.toInt() else 0xFFE76C00.toInt()
+    val CALIBRATION get() = if (AppAppearance.dark) 0xFFFF6B6B.toInt() else 0xFFD32F2F.toInt()
     val DANGER get() = if (AppAppearance.dark) 0xFFFF9898.toInt() else 0xFFB64242.toInt()
     val SUCCESS get() = if (AppAppearance.dark) 0xFF7DE3A4.toInt() else 0xFF26985A.toInt()
     val BLUE = 0xFF287DF0.toInt()

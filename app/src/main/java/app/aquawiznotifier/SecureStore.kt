@@ -21,6 +21,7 @@ class SecureStore(context: Context) {
     fun captureIngestion(record: JSONObject) = captures.record(record)
     fun supportData(): String = JSONObject(captures.export(selectedDevice(), BuildConfig.VERSION_NAME))
         .put("diagnosticBuild", BuildConfig.VERSION_NAME.contains("diagnostic"))
+        .put("calibrations", JSONArray(calibrationEvents(selectedDevice()).map { it.toJson() }))
         .put("state", JSONObject().put("authPaused", authPaused()).put("hasSession", session() != null)
             .put("lastPollEpochMs", lastPollEpochMs()).put("nextPollEpochMs", nextPollEpochMs())
             .put("androidSdk", android.os.Build.VERSION.SDK_INT).put("timeZone", java.time.ZoneId.systemDefault().id))
@@ -327,6 +328,25 @@ class SecureStore(context: Context) {
             doseRawField26 = optDoubleOrNull("doseRawField26"), doseAmountPerDkh = optDoubleOrNull("doseAmountPerDkh"),
             doseSchemaVersion = j.optInt("doseSchemaVersion", if (j.optString("rawId").startsWith("graph:")) 1 else 2),
         )
+    }
+
+    fun calibrationEvents(serial: String? = null): List<KhCalibrationEvent> = synchronized(historyLock) {
+        val rows = runCatching { JSONArray(prefs.getString("kh_calibrations", "[]")) }.getOrElse { JSONArray() }
+        (0 until rows.length()).mapNotNull { rows.optJSONObject(it)?.let(KhCalibrationEvent::parse) }
+            .filter { serial == null || it.serial.equals(serial.trim(), true) }.sortedByDescending { it.recordedAt }
+    }
+
+    fun recordKhCalibration(serial: String, newKh: Double, at: Instant = Instant.now()): KhCalibrationEvent {
+        require(serial.isNotBlank() && newKh.isFinite() && newKh >= 0)
+        val event = synchronized(historyLock) {
+            val previous = measurementHistory().firstOrNull { it.first.equals(serial.trim(), true) && !it.second.measuredAt.isAfter(at) }?.second?.kh
+            val entry = KhCalibrationEvent(java.util.UUID.randomUUID().toString(), serial.trim().uppercase(java.util.Locale.ROOT), at, newKh, previous)
+            val events = (calibrationEvents() + entry).sortedByDescending { it.recordedAt }.take(2000)
+            prefs.edit().putString("kh_calibrations", JSONArray(events.map { it.toJson() }).toString()).apply()
+            entry
+        }
+        appendActivity("[${event.serial}] ${event.description()}. Request accepted; applies at the next measurement or KHA SYNC. Local record.")
+        return event
     }
 
     fun appendActivity(message: String) {

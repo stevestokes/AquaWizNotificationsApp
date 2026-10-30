@@ -226,8 +226,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 33
-versionName = "0.8.21"
+versionCode = 34
+versionName = "0.8.22-preview"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -373,6 +373,10 @@ The cause of the reported 08:00 averaged reading is still under investigation; t
 ## 0.8.17 Chart reveal fix
 
 - Fix the chart reveal restarting when changing date ranges. Range buttons filter retained individual readings without forcing another server fetch; overlapping reveal requests keep the current animation progressing. Settings-only updates no longer replay the lines.
+
+## 0.8.22-preview Local calibration history
+
+Each successful dKH calibration request now creates a local event containing its controller, time, prior reading when available, and entered dKH. History and the activity log display these records; the support export includes them. The chart displays a dashed red vertical line at the event time and a red point at the entered dKH, with axes including the event even after the latest reading. Tap the marker to inspect it. Events persist through refreshes and restarts and are separate from measurements, so calibration requests do not replace server readings, affect dosing totals, or create measurement notifications. Disabling calibration (0) is recorded without plotting a zero-dKH point. The controller still applies the setting at its next measurement or KHA SYNC; the marker indicates the accepted request. Event history is stored locally, not uploaded to AquaWiz. Signed preview; public release stays v0.8.21.
 
 ## 0.8.21 Dark mode
 

@@ -11,23 +11,45 @@ import android.widget.TextView
 
 class HistoryAdapter(private val context: Context, private val store: SecureStore) : BaseAdapter() {
     private var readings = emptyList<Pair<String, Measurement>>()
+    private data class Entry(val reading: Pair<String, Measurement>? = null, val calibration: KhCalibrationEvent? = null) {
+        val at get() = reading?.second?.measuredAt ?: calibration!!.recordedAt
+    }
+    private var entries = emptyList<Entry>()
+    private var calibrations = emptyList<KhCalibrationEvent>()
     private var notes = emptyMap<String, String>()
     private data class Row(val date: TextView, val values: List<TextView>, val note: TextView)
     fun submit(items: List<Pair<String, Measurement>>) {
         val updatedNotes = items.associate { (serial, m) -> HistoryMerge.readingKey(serial, m) to store.measurementNote(serial, m) }
-        if (readings == items && notes == updatedNotes) return
+        val events = store.calibrationEvents()
+        if (readings == items && notes == updatedNotes && calibrations == events) return
+        calibrations = events
+        entries = (items.map { Entry(reading = it) } + events.map { Entry(calibration = it) }).sortedByDescending { it.at }
         readings = items
         notes = updatedNotes
         notifyDataSetChanged()
     }
-    override fun getCount() = readings.size
-    override fun getItem(position: Int) = readings[position]
+    override fun getCount() = entries.size
+    override fun getItem(position: Int): Any = entries[position].reading ?: entries[position].calibration!!
+    fun measurementAt(position: Int): Pair<String, Measurement>? = entries[position].reading
+    override fun getViewTypeCount() = 2
+    override fun getItemViewType(position: Int) = if (entries[position].calibration != null) 1 else 0
+    override fun areAllItemsEnabled() = false
     override fun getItemId(position: Int) = position.toLong()
-    override fun isEnabled(position: Int) = true
+    override fun isEnabled(position: Int) = entries[position].reading != null
     override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
-        val row = convertView as? LinearLayout ?: createRow()
+        entries[position].calibration?.let { event ->
+            return AwUi.label(context, AppDates.format(event.recordedAt) + "\n[" + event.serial + "] " + event.description() +
+                "\nLocal record · applies at the next measurement or KHA SYNC", 13f, true).apply {
+                tag = "calibration_event"
+                setTextColor(AwUi.CALIBRATION); setPadding(dp(12), dp(14), dp(12), dp(14))
+                setLineSpacing(dp(4).toFloat(), 1f)
+                setBackgroundColor(if (position % 2 == 0) AwUi.SURFACE else AwUi.ALTERNATE_ROW)
+                contentDescription = text
+            }
+        }
+        val row = (convertView as? LinearLayout)?.takeIf { it.tag is Row } ?: createRow()
         val holder = row.tag as Row
-        val (serial, m) = readings[position]
+        val (serial, m) = entries[position].reading!!
         val note = notes[HistoryMerge.readingKey(serial, m)].orEmpty()
         holder.note.text = note
         holder.note.visibility = if (note.isBlank()) View.GONE else View.VISIBLE

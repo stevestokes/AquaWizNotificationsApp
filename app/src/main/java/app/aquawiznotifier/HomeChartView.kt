@@ -41,6 +41,18 @@ class HomeChartView(context: Context) : View(context) {
     private val bandPaint = Paint().apply { color = 0x0E5B34FF }
     private val limitPaint = Paint().apply { color = 0x775B34FF; strokeWidth = dp(1f); pathEffect = DashPathEffect(floatArrayOf(dp(4f), dp(4f)), 0f) }
     private var items = emptyList<Measurement>()
+    private var calibrations = emptyList<KhCalibrationEvent>()
+    private val calibrationLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = AwUi.CALIBRATION; strokeWidth = dp(1.5f)
+        pathEffect = DashPathEffect(floatArrayOf(dp(5f), dp(4f)), 0f)
+    }
+    private val calibrationPointPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = AwUi.CALIBRATION }
+    private val calibrationHaloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = AwUi.SURFACE }
+    var onCalibrationSelected: ((KhCalibrationEvent) -> Unit)? = null
+    fun setCalibrations(events: List<KhCalibrationEvent>) {
+        val valid = events.filter { it.enabled && it.newKh.isFinite() }.sortedBy { it.recordedAt }
+        if (calibrations != valid) { calibrations = valid; invalidate() }
+    }
     private var visible = ChartSeries.values().filter { it.defaultVisible }.toSet()
     private var styles = emptyMap<ChartSeries, ChartLineStyle>()
     private var limits: Pair<Double?, Double?> = null to null
@@ -88,8 +100,9 @@ class HomeChartView(context: Context) : View(context) {
         invalidate()
     }
     private fun timeWindow(): Pair<Long, Long> {
-        val start = items.first().measuredAt.toEpochMilli()
-        val end = items.last().measuredAt.toEpochMilli()
+        val times = items.map { it.measuredAt.toEpochMilli() } + calibrations.map { it.recordedAt.toEpochMilli() }
+        val start = times.minOrNull() ?: 0L
+        val end = times.maxOrNull() ?: start
         val span = max(60_000L, end - start)
         return (start + span * (center - 0.5 / zoom)).toLong() to (start + span * (center + 0.5 / zoom)).toLong()
     }
@@ -98,7 +111,7 @@ class HomeChartView(context: Context) : View(context) {
         val left = dp(44f); val right = plotRight()
         val top = dp(38f); val bottom = height - dp(32f)
         if (right <= left || bottom <= top) return
-        val window = if (items.isEmpty()) null else timeWindow()
+        val window = if (items.isEmpty() && calibrations.isEmpty()) null else timeWindow()
         val inView = if (window == null) items else items.filterIndexed { index, m ->
             val time = m.measuredAt.toEpochMilli()
             // Include adjoining endpoints so segments crossing a zoom edge remain in bounds.
@@ -106,7 +119,8 @@ class HomeChartView(context: Context) : View(context) {
                 (index < items.lastIndex && time < window.first && items[index + 1].measuredAt.toEpochMilli() >= window.first) ||
                 (index > 0 && time > window.second && items[index - 1].measuredAt.toEpochMilli() <= window.second)
         }
-        val primary = ChartBounds.calculate(inView, limits.first, limits.second, visible, targetKh)
+        val calibrationInView = if (window == null) emptyList() else calibrations.filter { it.recordedAt.toEpochMilli() in window.first..window.second }
+        val primary = ChartBounds.calculate(inView, limits.first, limits.second, visible, targetKh, calibrationInView.map { it.newKh })
         val secondary = ChartBounds.secondary(inView, visible)
         fun mapY(value: Double, bounds: Pair<Double, Double>, from: Float, to: Float) =
             to - (to - from) * ((value - bounds.first) / (bounds.second - bounds.first)).toFloat()
@@ -143,13 +157,14 @@ class HomeChartView(context: Context) : View(context) {
             canvas.drawText(("%." + decimals + "f").format(java.util.Locale.US, value), right + dp(6f), yy + dp(4f), axisPaint)
         }
         axisPaint.color = AwUi.MUTED
-        if (items.isEmpty() || visible.isEmpty()) {
+        if ((items.isEmpty() || visible.isEmpty()) && calibrations.isEmpty()) {
             val message = if (items.isEmpty()) "No measurements in this range" else "Select a line above to display it"
             canvas.drawText(message, left, (top + bottom) / 2, axisPaint)
             return
         }
         val (minTime, maxTime) = timeWindow()
-        fun x(m: Measurement) = left + (right - left) * ((m.measuredAt.toEpochMilli() - minTime).toDouble() / max(1, maxTime - minTime)).toFloat()
+        fun xAt(time: Long) = left + (right - left) * ((time - minTime).toDouble() / max(1, maxTime - minTime)).toFloat()
+        fun x(m: Measurement) = xAt(m.measuredAt.toEpochMilli())
         visible.forEach { series ->
             val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = series.color; style = Paint.Style.STROKE; strokeWidth = dp(2.5f)
@@ -195,6 +210,16 @@ class HomeChartView(context: Context) : View(context) {
             canvas.drawLine(x(items[it]), top, x(items[it]), bottom, markerPaint)
             canvas.restore()
         }
+        // Local events are annotations: never join them into the measurement series.
+        canvas.save()
+        canvas.clipRect(left - dp(6f), top - dp(6f), right + dp(6f), bottom + dp(6f))
+        calibrationInView.forEach { event ->
+            val xx = xAt(event.recordedAt.toEpochMilli())
+            canvas.drawLine(xx, top, xx, bottom, calibrationLinePaint)
+            canvas.drawCircle(xx, y(event.newKh), dp(5.5f), calibrationHaloPaint)
+            canvas.drawCircle(xx, y(event.newKh), dp(4f), calibrationPointPaint)
+        }
+        canvas.restore()
         val first = AppDates.format(java.time.Instant.ofEpochMilli(minTime))
         val last = AppDates.format(java.time.Instant.ofEpochMilli(maxTime))
         val fw = axisPaint.measureText(first); val lw = axisPaint.measureText(last)
@@ -208,7 +233,7 @@ class HomeChartView(context: Context) : View(context) {
         return width - maxOf(dp(64f), labelWidth + dp(12f))
     }
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (items.isEmpty()) return false
+        if (items.isEmpty() && calibrations.isEmpty()) return false
         scale.onTouchEvent(event)
         gestures.onTouchEvent(event)
         when (event.actionMasked) {
@@ -219,8 +244,17 @@ class HomeChartView(context: Context) : View(context) {
                     val left = dp(44f); val right = plotRight()
                     if (right <= left) return false
                     val target = start + ((event.x.coerceIn(left, right) - left) / (right - left) * (end - start)).toLong()
-                    selected = items.indices.minByOrNull { abs(items[it].measuredAt.toEpochMilli() - target) }
-                    selected?.let { onSelected?.invoke(items[it]); contentDescription = AppDates.format(items[it].measuredAt) + ", KH " + items[it].kh }
+                    val calibration = calibrations.filter { it.recordedAt.toEpochMilli() in start..end }
+                        .minByOrNull { abs(it.recordedAt.toEpochMilli() - target) }
+                    val eventX = calibration?.let { left + (right - left) * (it.recordedAt.toEpochMilli() - start).toDouble() / max(1, end - start) }
+                    if (calibration != null && eventX != null && abs(eventX - event.x) <= dp(12f)) {
+                        selected = null
+                        onCalibrationSelected?.invoke(calibration)
+                        contentDescription = AppDates.format(calibration.recordedAt) + ", " + calibration.description() + ", local calibration request"
+                    } else {
+                        selected = items.indices.minByOrNull { abs(items[it].measuredAt.toEpochMilli() - target) }
+                        selected?.let { onSelected?.invoke(items[it]); contentDescription = AppDates.format(items[it].measuredAt) + ", KH " + items[it].kh }
+                    }
                     invalidate()
                 }
             }

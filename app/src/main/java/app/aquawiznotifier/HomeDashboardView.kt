@@ -112,6 +112,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         val displayed = HistoryMerge.merge((all + (if (pointsDevice == serial) points else emptyList()))
             .map { serial to it }).map { it.second }.filter { !it.measuredAt.isBefore(since) }.sortedBy { it.measuredAt }
         chart.setOverview(selectedRange != Range.DAY)
+        chart.setCalibrations(store.calibrationEvents(serial).filter { !it.recordedAt.isBefore(since) })
         chart.setMeasurements(displayed, summary?.khLow, summary?.khHigh, summary?.khTarget)
         val signature = displayed.lastOrNull()?.toString() + selectedRange.name + serial
         if (signature != displaySignature) { displayed.lastOrNull()?.let(::showSelected); displaySignature = signature }
@@ -194,6 +195,10 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         card.addView(row)
         card.addView(selectedTime)
         chart.onSelected = ::showSelected
+        chart.onCalibrationSelected = { event ->
+            selectedTime.text = AppDates.format(event.recordedAt) + " · " + event.description() + " · local calibration"
+            toggles.forEach { (series, toggle) -> toggle.text = series.label + if (series == ChartSeries.KH) " %.2f".format(event.newKh) else " —" }
+        }
         card.addView(chart, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(200)))
         val ranges = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(6), 0, dp(4)) }
         Range.values().forEach { range ->
@@ -321,9 +326,9 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
                     val result = runCatching {
                         check(current() && !store.authPaused()) { "Connection changed. Reconnect in Config" }
                         AquaWizApi(baseUrl, store::captureIngestion, "calibration-save", dosingAmountPerDkh = store::dosingAmountPerDkh).setTrueTankKh(session, serial, value)
+                        store.recordKhCalibration(serial, value.toDouble())
                         if (current()) {
                             store.deviceSummary(serial)?.let { store.saveDeviceSummary(serial, it.copy(trueTankKh = value.toDouble())) }
-                            store.appendActivity("True tank KH calibration saved: " + value.stripTrailingZeros().toPlainString() + " dKH")
                         }
                     }
                     result.exceptionOrNull()?.let(::pauseIfExpired)
