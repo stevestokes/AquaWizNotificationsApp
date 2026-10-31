@@ -29,12 +29,3 @@ jobs:
         with:
           name: documentation-screenshots
           path: docs/screenshots/*.png
-      - name: Export sample screenshots for review
-        run: |
-          python - <<'PYTHON'
-          import base64, pathlib
-          for path in sorted(pathlib.Path('docs/screenshots').glob('*.png')):
-              if path.name == 'notification.png':
-                  continue
-              print('SCREENSHOT:' + path.name + ':' + base64.b64encode(path.read_bytes()).decode())
-          PYTHON

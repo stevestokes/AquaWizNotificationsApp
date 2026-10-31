@@ -89,10 +89,15 @@ jobs:
             if [[ "$RELEASE_TAG" == *diagnostic* || "$RELEASE_TAG" == *preview* ]]; then
               EXTRA_FLAGS+=(--prerelease --latest=false)
             fi
+            NOTES_FLAGS=(--generate-notes)
+            NOTES_FILE="docs/releases/$RELEASE_TAG.md"
+            if [ -f "$NOTES_FILE" ]; then
+              NOTES_FLAGS=(--notes-file "$NOTES_FILE")
+            fi
             gh release create "$RELEASE_TAG" "$STABLE" "$VERSIONED" "${EXTRA_FLAGS[@]}" \
               --title "AquaWiz Notifier $RELEASE_TAG" \
               --target "$GITHUB_SHA" \
-              --generate-notes
+              "${NOTES_FLAGS[@]}"
           fi
 
       - name: Remove signing key

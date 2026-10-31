@@ -18,15 +18,19 @@ Android only. This is a sideloaded APK. On first install, Android may ask you to
 
 ## Screenshots
 
-Account names and device ID suffixes are redacted.
+Home, History, and Config show current app views rendered with sample controller data, including a local calibration. The notification image is from an earlier release, with identifying details redacted.
 
 | Home | History |
 |:---:|:---:|
 | <img src="docs/screenshots/home.png" alt="Home dashboard with KH, pH, dosing and an interactive chart" width="280"> | <img src="docs/screenshots/history.png" alt="Measurement history with all five values" width="280"> |
 
-| Config | Notification |
+| Home · dark | History · dark |
 |:---:|:---:|
-| <img src="docs/screenshots/config.png" alt="Connection and notification settings with the account name and device suffix redacted" width="280"> | <img src="docs/screenshots/notification.png" alt="Bold measurement notification with the device suffix redacted" width="280"> |
+| <img src="docs/screenshots/home-dark.png" alt="Dark dashboard with a red calibration marker" width="280"> | <img src="docs/screenshots/history-dark.png" alt="Dark history with a local calibration entry" width="280"> |
+
+| Config | Config · dark |
+|:---:|:---:|
+| <img src="docs/screenshots/config.png" alt="Connection and notification settings with the account name and device suffix redacted" width="280"> | <img src="docs/screenshots/config-dark.png" alt="Dark configuration with appearance settings" width="280"> |
 
 ## Features
 
@@ -46,6 +50,8 @@ Account names and device ID suffixes are redacted.
 - New measurement imports use one-day graph requests. Longer charts use saved individual readings, because year-long AquaWiz queries return daily averages with misleading 8 AM timestamps in Eastern daylight time. Existing entries are removed only when they exactly match a captured daily summary and their timestamp was absent from captured raw readings.
 - Persistent, auto-scrolling activity/diagnostic log in the optional Status section.
 - Local measurement History stores every retrieved measurement and all available values regardless of notification-display settings.
+- Successful dKH calibrations are logged locally in History and Status, with a dashed red chart marker and a red point at the entered dKH.
+- Light, Dark, or Follow Android system appearance, saved in Config.
 - Global and China AquaWiz server support.
 - GitHub Releases update checker with an Android notification when a newer app version is available.
 - Manual **Check for updates** button.
@@ -148,7 +154,7 @@ For KH-series graph rows, the official app transforms these raw fields:
 | Raw field | Meaning | Official transform |
 | --- | --- | --- |
 | `field22` | dKH | value / 1000 |
-| `field26` | Dose (mL) | value / 5000 |
+| `field26` | Raw dosing demand | value × configured mL per dKH / 1000 |
 | `field27` | Tank pH | value / 1000 |
 | `field28` | pH(O), fully aerated pH | value / 1000 |
 | derived `delta` | ΔpH | pH - pH(O) |
@@ -159,7 +165,7 @@ See [docs/API_REVERSE_ENGINEERING.md](docs/API_REVERSE_ENGINEERING.md) for the d
 
 ### Home
 
-AquaWiz-style dashboard with current KH/pH, dosing summary, a **Take me to the AW app** shortcut, and an interactive KH/pH/pH(O) chart. Range buttons (`1D`, `3D`, `1W`, `1M`, `1Y`) fetch the official AquaWiz graph endpoint using the existing bearer token and merge those points into local History. The chart uses a single Y axis with tight bounds around the target range and every enabled data line, with 0.2 outer padding. Toggle KH, pH, pH(O), ΔpH, and Dose independently. Long press a legend item for solid, dashed, or dotted lines. Visibility, styles, and the selected range are saved locally. Drag to inspect, pinch to zoom, and double tap to reset.
+AquaWiz-style dashboard with current KH/pH, dosing summary, a **Take me to the AW app** shortcut, and an interactive KH/pH/pH(O) chart. Range buttons (`1D`, `3D`, `1W`, `1M`, `1Y`) filter locally retained individual readings. Refresh imports bounded raw graph requests using the existing bearer token; long-range daily aggregates are never used as measurements. The chart uses a single Y axis with tight bounds around the target range and every enabled data line, with 0.2 outer padding. Toggle KH, pH, pH(O), ΔpH, and Dose independently. Long press a legend item for solid, dashed, or dotted lines. Visibility, styles, and the selected range are saved locally. Drag to inspect, pinch to zoom, and double tap to reset.
 
 ### Status
 
@@ -226,8 +232,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 34
-versionName = "0.8.22-preview"
+versionCode = 35
+versionName = "0.8.22"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -374,9 +380,9 @@ The cause of the reported 08:00 averaged reading is still under investigation; t
 
 - Fix the chart reveal restarting when changing date ranges. Range buttons filter retained individual readings without forcing another server fetch; overlapping reveal requests keep the current animation progressing. Settings-only updates no longer replay the lines.
 
-## 0.8.22-preview Local calibration history
+## 0.8.22 Local calibration history
 
-Each successful dKH calibration request now creates a local event containing its controller, time, prior reading when available, and entered dKH. History and the activity log display these records; the support export includes them. The chart displays a dashed red vertical line at the event time and a red point at the entered dKH, with axes including the event even after the latest reading. Tap the marker to inspect it. Events persist through refreshes and restarts and are separate from measurements, so calibration requests do not replace server readings, affect dosing totals, or create measurement notifications. Disabling calibration (0) is recorded without plotting a zero-dKH point. The controller still applies the setting at its next measurement or KHA SYNC; the marker indicates the accepted request. Event history is stored locally, not uploaded to AquaWiz. Signed preview; public release stays v0.8.21.
+Each successful dKH calibration request now creates a local event containing its controller, time, prior reading when available, and entered dKH. History and the activity log display these records; the support export includes them. The chart displays a dashed red vertical line at the event time and a red point at the entered dKH, with axes including the event even after the latest reading. Tap the marker to inspect it. Events persist through refreshes and restarts and are separate from measurements, so calibration requests do not replace server readings, affect dosing totals, or create measurement notifications. Disabling calibration (0) is recorded without plotting a zero-dKH point. The controller still applies the setting at its next measurement or KHA SYNC; the marker indicates the accepted request. Event history is stored locally, not uploaded to AquaWiz. Public release following v0.8.22-preview, with refreshed light/dark screenshots. See [release notes](docs/releases/v0.8.22.md).
 
 ## 0.8.21 Dark mode
 
