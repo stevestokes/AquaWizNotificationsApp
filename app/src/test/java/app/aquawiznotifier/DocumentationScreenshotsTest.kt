@@ -21,6 +21,8 @@ import org.robolectric.annotation.GraphicsMode
 class DocumentationScreenshotsTest {
     @Test fun captureDocumentationViews() {
         assumeTrue(System.getenv("AQUAWIZ_SCREENSHOTS") == "true")
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("America/New_York"))
+        val sampleTime = Instant.now().minusSeconds(60)
         val output = File("../docs/screenshots").apply { mkdirs() }
         for (mode in listOf(AppearanceMode.LIGHT, AppearanceMode.DARK)) {
             // Deliberately skip onCreate/onResume: documentation rendering must never log in,
@@ -35,7 +37,7 @@ class DocumentationScreenshotsTest {
             store.setDosingContainerMl(serial, 500.0)
             store.saveDeviceSummary(serial, DeviceSummary(khTarget = 8.0, khDeviation = .2,
                 phProbeStatus = 950.0, dosingRemainingMl = 325.0, dosingWarningMl = 50.0))
-            val now = Instant.now().minusSeconds(60)
+            val now = sampleTime
             for (i in 23 downTo 0) {
                 store.saveMeasurement(serial, Measurement(kh = 8.0 + .09 * kotlin.math.sin(i * .8),
                     measuredAt = now.minusSeconds(i * 3600L), ph = 8.25 + .05 * kotlin.math.sin(i * .4),
@@ -57,7 +59,16 @@ class DocumentationScreenshotsTest {
                 (field("bottomNavigation").get(activity) as BottomNavigationView).select(section)
                 val width = View.MeasureSpec.makeMeasureSpec(412, View.MeasureSpec.EXACTLY)
                 val height = View.MeasureSpec.makeMeasureSpec(850, View.MeasureSpec.EXACTLY)
-                root.measure(width, height); root.layout(0, 0, 412, 850)
+                fun settle(view: View) {
+                    view.jumpDrawablesToCurrentState()
+                    if (view is android.view.ViewGroup) for (i in 0 until view.childCount) settle(view.getChildAt(i))
+                }
+                repeat(3) {
+                    root.forceLayout()
+                    root.measure(width, height); root.layout(0, 0, 412, 850)
+                    root.viewTreeObserver.dispatchOnPreDraw()
+                    settle(root)
+                }
                 val bitmap = Bitmap.createBitmap(412, 850, Bitmap.Config.ARGB_8888)
                 root.draw(Canvas(bitmap))
                 File(output, "$section$suffix.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
