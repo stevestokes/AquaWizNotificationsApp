@@ -1,0 +1,40 @@
+name: Documentation screenshots
+on:
+  push:
+    branches: [main]
+    paths:
+      - app/src/test/java/app/aquawiznotifier/DocumentationScreenshotsTest.kt
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android platform
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+      - name: Render app views with sample data
+        env:
+          AQUAWIZ_SCREENSHOTS: 'true'
+        run: ./gradlew testDebugUnitTest --tests app.aquawiznotifier.DocumentationScreenshotsTest
+      - uses: actions/upload-artifact@v4
+        with:
+          name: documentation-screenshots
+          path: docs/screenshots/*.png
+      - name: Export sample screenshots for review
+        run: |
+          python - <<'PYTHON'
+          import base64, pathlib
+          for path in sorted(pathlib.Path('docs/screenshots').glob('*.png')):
+              if path.name == 'notification.png':
+                  continue
+              print('SCREENSHOT:' + path.name + ':' + base64.b64encode(path.read_bytes()).decode())
+          PYTHON
