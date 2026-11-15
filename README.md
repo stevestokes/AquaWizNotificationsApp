@@ -233,8 +233,8 @@ The repository must be **public** and have at least one published GitHub Release
 Every installable release must increment:
 
 ```kotlin
-versionCode = 35
-versionName = "0.8.22"
+versionCode = 36
+versionName = "0.8.23"
 ```
 
 Future releases must use the **same Android signing key**. Otherwise Android will reject the new APK as an update to the installed app.
@@ -404,3 +404,7 @@ Signed diagnostic prerelease for reproducing settings and session failures. Conf
 Includes the controller settings label fix:
 
 - Fix blank KH Target, dosing settings, and probe health when the device-scoped settings response uses a tank name in `serial`. Preserve explicit controller-ID checks and reject ambiguous responses.
+
+## 0.8.23 Compact chart summary
+
+A single line above the graph shows the last 24 hours’ saved KH range and the percentage of readings within the controller’s current target bounds. The window remains 24 hours when changing chart ranges. Today’s dosing stays in its existing hero card. Calculations use locally retained raw measurements, with no extra server requests. Missing readings or target bounds show as unavailable. The summary supports light/dark mode and wraps with larger accessibility text.
