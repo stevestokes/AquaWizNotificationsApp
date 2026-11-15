@@ -10,7 +10,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.concurrent.thread
 
@@ -41,6 +40,16 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
     private val dailyDose = label("—", 22f, AwUi.VALUE, true)
     private val dosingSparkline = DosingSparklineView(context)
     private val syncStatus = label("", 12f, AwUi.MUTED)
+    private val readingOverview = label("", 11f, AwUi.INK).apply {
+        tag = "reading_overview"
+        setPadding(dp(2), dp(4), dp(2), dp(8))
+        // Keep one compact line at standard text sizes; let accessibility text wrap.
+        if (resources.configuration.fontScale < 1.3f) {
+            setSingleLine(true)
+            setAutoSizeTextTypeUniformWithConfiguration(10, 11, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+    }
     private val selectedTime = label("", 12f, AwUi.MUTED)
     private val chart = HomeChartView(context)
     private val toggles = linkedMapOf<ChartSeries, CheckBox>()
@@ -103,12 +112,16 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         val fullVolume = store.dosingContainerMl(serial)
         containerTotal.text = fullVolume?.let { "of ${it.toLong()} mL" } ?: "Set full volume"
         dosingBeaker.setLevel(serial, summary?.dosingRemainingMl, fullVolume, summary?.dosingWarningMl)
-        val today = LocalDate.now()
-        val todayReadings = all.filter { it.measuredAt.atZone(ZoneId.systemDefault()).toLocalDate() == today }.sortedBy { it.measuredAt }
-        val todayValues = todayReadings.mapNotNull { it.doseMl?.takeIf { n -> n.isFinite() && n >= 0 } }
-        dailyDose.text = if (todayValues.isEmpty() || todayValues.size != todayReadings.size) "—" else todayValues.sum().toLong().toString()
+        val now = Instant.now()
+        val zone = ZoneId.systemDefault()
+        val overview = ReadingOverview.calculate(all, summary, now, zone)
+        readingOverview.text = overview.text
+        readingOverview.contentDescription = overview.description
+        val today = now.atZone(zone).toLocalDate()
+        val todayReadings = all.filter { !it.measuredAt.isAfter(now) && it.measuredAt.atZone(zone).toLocalDate() == today }.sortedBy { it.measuredAt }
+        dailyDose.text = overview.doseText
         dosingSparkline.setMeasurements(todayReadings)
-        val since = Instant.now().minusSeconds(selectedRange.seconds)
+        val since = now.minusSeconds(selectedRange.seconds)
         val displayed = HistoryMerge.merge((all + (if (pointsDevice == serial) points else emptyList()))
             .map { serial to it }).map { it.second }.filter { !it.measuredAt.isBefore(since) }.sortedBy { it.measuredAt }
         chart.setOverview(selectedRange != Range.DAY)
@@ -173,6 +186,7 @@ class HomeDashboardView(context: Context, private val store: SecureStore) : Scro
         val card = HeroCardLayout(context, cornerRadius = 24).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(8), dp(8), dp(8), dp(8))
         }
+        card.addView(readingOverview, full())
         var row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
         ChartSeries.values().forEachIndexed { index, series ->
             if (index % 3 == 0 && index > 0) { card.addView(row); row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL } }

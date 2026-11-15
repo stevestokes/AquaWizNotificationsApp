@@ -52,6 +52,7 @@ Home, History, and Config show current app views rendered with sample controller
 - Local measurement History stores every retrieved measurement and all available values regardless of notification-display settings.
 - Successful dKH calibrations are logged locally in History and Status, with a dashed red chart marker and a red point at the entered dKH.
 - Light, Dark, or Follow Android system appearance, saved in Config.
+- A compact chart summary shows the last 24 hours’ saved KH range and the percentage of readings within the current target bounds. It always uses a rolling 24-hour window, independently of the chart range. Today’s dosing total stays in the hero area.
 - Global and China AquaWiz server support.
 - GitHub Releases update checker with an Android notification when a newer app version is available.
 - Manual **Check for updates** button.

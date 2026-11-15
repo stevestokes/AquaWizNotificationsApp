@@ -69,6 +69,13 @@ class DocumentationScreenshotsTest {
                     root.viewTreeObserver.dispatchOnPreDraw()
                     settle(root)
                 }
+                if (section == "home") {
+                    val overview = root.findViewWithTag<android.widget.TextView>("reading_overview")
+                    org.junit.Assert.assertTrue(overview.text.startsWith("Last 24h: "))
+                    org.junit.Assert.assertTrue(overview.contentDescription.contains("saved readings"))
+                    org.junit.Assert.assertEquals(1, overview.lineCount)
+                    org.junit.Assert.assertEquals(0, overview.layout.getEllipsisCount(0))
+                }
                 val bitmap = Bitmap.createBitmap(412, 850, Bitmap.Config.ARGB_8888)
                 root.draw(Canvas(bitmap))
                 File(output, "$section$suffix.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
